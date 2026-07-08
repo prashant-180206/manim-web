@@ -1,0 +1,290 @@
+@startuml Animat
+!theme hacker
+skinparam classAttributeIconSize 0
+hide empty members
+
+'========================================================
+' SCENE
+'========================================================
+
+class Scene{
+    +Selection selection
+
+    +MobjectManager mobjects
+    +AnimationSystem animations
+    +TrackerSystem trackers
+
+    +SceneEvents events
+
+    --
+    +selectMobject(id:String)
+    +findMobject(id:String)
+    +clearSelection()
+}
+
+Scene *-- Selection
+Scene *-- MobjectManager
+Scene *-- AnimationSystem
+Scene *-- TrackerSystem
+Scene *-- SceneEvents
+
+class Selection{
+    +Mobject activeMobject
+    +Animation activeAnimation
+    +Tracker activeTracker
+    +Property activeProperty
+
+    +select(Mobject)
+    +clear()
+}
+
+class SceneEvents{
+    +onSelectionChanged()
+
+    +onMobjectAdded()
+    +onMobjectDeleted()
+
+    +onAnimationAdded()
+    +onAnimationDeleted()
+
+    +onTrackerAdded()
+    +onTrackerDeleted()
+
+    +onPropertyChanged()
+}
+
+'========================================================
+' MOBJECTS
+'========================================================
+
+class MobjectManager{
+
+    -Map<String,Mobject> objects
+
+    +add(Mobject)
+    +remove(id:String)
+    +find(id:String)
+}
+
+MobjectManager *-- Mobject
+
+abstract class Mobject{
+
+    +String id
+    +String name
+
+    +PropertyController properties
+
+    +AnimationProvider animations
+}
+
+class Circle
+class Rectangle
+class Polygon
+class Curve
+class Line
+class Text
+
+Circle --|> Mobject
+Rectangle --|> Mobject
+Polygon --|> Mobject
+Curve --|> Mobject
+Line --|> Mobject
+Text --|> Mobject
+
+Mobject *-- PropertyController
+Mobject *-- AnimationProvider
+
+'========================================================
+' PROPERTIES
+'========================================================
+
+enum PropertyKey{
+    Position
+    Rotation
+    Scale
+    Color
+    Opacity
+    StrokeWidth
+    StrokeColor
+}
+
+class PropertyController{
+
+    -Map<PropertyKey,Property> properties
+
+    +add(Property)
+    +remove(PropertyKey)
+    +get(PropertyKey)
+    +all()
+}
+
+abstract class Property{
+
+    +String id
+
+    +PropertyKey key
+
+    +Value value
+
+    +Mobject owner
+
+    --
+    +setValue(Value)
+    +getValue()
+}
+
+PropertyController *-- Property
+
+class PositionProperty
+class RotationProperty
+class ScaleProperty
+class ColorProperty
+class OpacityProperty
+class StrokeWidthProperty
+class StrokeColorProperty
+
+PositionProperty --|> Property
+RotationProperty --|> Property
+ScaleProperty --|> Property
+ColorProperty --|> Property
+OpacityProperty --|> Property
+StrokeWidthProperty --|> Property
+StrokeColorProperty --|> Property
+
+Property --> Value
+
+'========================================================
+' VALUES
+'========================================================
+
+abstract class Value
+
+class NumberValue{
+    +double value
+}
+
+class VectorValue{
+    +Vector value
+}
+
+class ColorValue{
+    +Color value
+}
+
+class StringValue{
+    +String value
+}
+
+NumberValue --|> Value
+VectorValue --|> Value
+ColorValue --|> Value
+StringValue --|> Value
+
+'========================================================
+' ANIMATION
+'========================================================
+
+class AnimationProvider{
+
+    +supportedAnimations()
+
+    +create(
+        animationName,
+        parameters
+    )
+}
+
+class AnimationSystem{
+
+    +List<Animation> animations
+
+    +int currentIndex
+
+    --
+    +add(Animation)
+    +remove(id:String)
+
+    +play()
+    +pause()
+    +reverse()
+    +seek(time)
+}
+
+Scene --> AnimationSystem
+
+AnimationSystem *-- Animation
+
+abstract class Animation{
+    +String id
+    +String name
+    +Mobject target
+    +Property targetProperty
+    +Value startValue
+    +Value endValue
+    +double duration
+    +double progress
+    +Easing easing
+    --
+    +play()
+    +pause()
+    +seek()
+}
+
+Animation --> Property
+Animation --> Mobject
+
+'========================================================
+' TRACKERS
+'========================================================
+
+class TrackerSystem{
+
+    -Map<String,Tracker> trackers
+
+    -Map<String,Binding> bindings
+
+    --
+    +addTracker(Tracker)
+
+    +removeTracker(id)
+
+    +connect()
+
+    +disconnect()
+}
+
+TrackerSystem *-- Tracker
+TrackerSystem *-- Binding
+
+class Tracker{
+
+    +String id
+
+    +String name
+
+    +Value value
+
+    --
+    +setValue(Value)
+
+    +getValue()
+}
+
+class Binding{
+
+    +String id
+
+    +Tracker tracker
+
+    +Property property
+
+    +transform(Value)
+
+    +update()
+}
+
+Binding --> Tracker
+Binding --> Property
+
+@enduml
