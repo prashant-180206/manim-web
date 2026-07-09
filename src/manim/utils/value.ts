@@ -8,6 +8,8 @@
 |--------------------------------------------------------------------------
 */
 
+import { Vector } from "./vector";
+
 /*
 |--------------------------------------------------------------------------
 | Files Required
@@ -18,19 +20,16 @@
 |
 |--------------------------------------------------------------------------
 */
-class Vector {
-  constructor(
-    public x: number,
-    public y: number,
-  ) {
-    this.x = x;
-    this.y = y;
-  }
-}
 
 export class Value<T> {
   constructor(public value: T) {
     this.value = value;
+  }
+  get() {
+    return this.value;
+  }
+  change(newValue: T) {
+    this.value = newValue;
   }
 }
 

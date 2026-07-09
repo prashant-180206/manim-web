@@ -29,16 +29,20 @@ Scene *-- TrackerSystem
 Scene *-- SceneEvents
 
 class Selection{
-    +Mobject activeMobject
-    +Animation activeAnimation
-    +Tracker activeTracker
-    +Property activeProperty
 
+    +Mobject activeMobject
+
+    +Animation activeAnimation
+
+    +String activeProperty
+
+    --
     +select(Mobject)
     +clear()
 }
 
 class SceneEvents{
+
     +onSelectionChanged()
 
     +onMobjectAdded()
@@ -61,6 +65,7 @@ class MobjectManager{
 
     -Map<String,Mobject> objects
 
+    --
     +add(Mobject)
     +remove(id:String)
     +find(id:String)
@@ -71,19 +76,47 @@ MobjectManager *-- Mobject
 abstract class Mobject{
 
     +String id
+
     +String name
 
-    +PropertyController properties
+    +PropertyController<BaseProperty> propertyController
 
     +AnimationProvider animations
+
+    --
+    +render(ctx)
+    +contains(x,y)
 }
 
-class Circle
-class Rectangle
-class Polygon
-class Curve
-class Line
-class Text
+class Circle{
+
+    +PropertyController<CircleProperty> propertyController
+}
+
+class Rectangle{
+
+    +PropertyController<RectangleProperty> propertyController
+}
+
+class Polygon{
+
+    +PropertyController<PolygonProperty> propertyController
+}
+
+class Curve{
+
+    +PropertyController<CurveProperty> propertyController
+}
+
+class Line{
+
+    +PropertyController<LineProperty> propertyController
+}
+
+class Text{
+
+    +PropertyController<TextProperty> propertyController
+}
 
 Circle --|> Mobject
 Rectangle --|> Mobject
@@ -99,87 +132,105 @@ Mobject *-- AnimationProvider
 ' PROPERTIES
 '========================================================
 
-enum PropertyKey{
-    Position
-    Rotation
-    Scale
-    Color
-    Opacity
-    StrokeWidth
-    StrokeColor
-}
+class PropertyController<T>{
 
-class PropertyController{
-
-    -Map<PropertyKey,Property> properties
-
-    +add(Property)
-    +remove(PropertyKey)
-    +get(PropertyKey)
-    +all()
-}
-
-abstract class Property{
-
-    +String id
-
-    +PropertyKey key
-
-    +Value value
-
-    +Mobject owner
+    +T properties
 
     --
-    +setValue(Value)
-    +getValue()
+    +getKeys()
 }
 
-PropertyController *-- Property
+interface BaseProperty{
 
-class PositionProperty
-class RotationProperty
-class ScaleProperty
-class ColorProperty
-class OpacityProperty
-class StrokeWidthProperty
-class StrokeColorProperty
+    +opacity : Value<number>
 
-PositionProperty --|> Property
-RotationProperty --|> Property
-ScaleProperty --|> Property
-ColorProperty --|> Property
-OpacityProperty --|> Property
-StrokeWidthProperty --|> Property
-StrokeColorProperty --|> Property
+    +position : Value<Vector>
 
-Property --> Value
+    +scale : Value<Vector>
+
+    +zindex : Value<number>
+
+    +color : Value<string>
+}
+
+interface ShapeProperty{
+
+    +strokeColor : Value<string>
+
+    +strokeWidth : Value<number>
+}
+
+ShapeProperty --|> BaseProperty
+
+interface CircleProperty{
+
+    +radius : Value<number>
+}
+
+CircleProperty --|> ShapeProperty
+
+interface RectangleProperty{
+
+    +width : Value<number>
+
+    +height : Value<number>
+}
+
+RectangleProperty --|> ShapeProperty
+
+interface PolygonProperty{
+
+    +points : Value<Vector[]>
+}
+
+PolygonProperty --|> ShapeProperty
+
+interface CurveProperty{
+
+    +points : Value<Vector[]>
+}
+
+CurveProperty --|> ShapeProperty
+
+interface LineProperty{
+
+    +start : Value<Vector>
+
+    +end : Value<Vector>
+}
+
+LineProperty --|> ShapeProperty
+
+interface TextProperty{
+
+    +text : Value<string>
+
+    +fontSize : Value<number>
+
+    +fontFamily : Value<string>
+}
+
+TextProperty --|> BaseProperty
+
+PropertyController --> BaseProperty
 
 '========================================================
 ' VALUES
 '========================================================
 
-abstract class Value
+class Value<T>{
 
-class NumberValue{
-    +double value
+    +T value
+
+    --
+    +get()
+
+    +set(value)
 }
 
-class VectorValue{
-    +Vector value
-}
+class Vector
 
-class ColorValue{
-    +Color value
-}
-
-class StringValue{
-    +String value
-}
-
-NumberValue --|> Value
-VectorValue --|> Value
-ColorValue --|> Value
-StringValue --|> Value
+Value --> Vector
 
 '========================================================
 ' ANIMATION
@@ -203,11 +254,15 @@ class AnimationSystem{
 
     --
     +add(Animation)
-    +remove(id:String)
+
+    +remove(id)
 
     +play()
+
     +pause()
+
     +reverse()
+
     +seek(time)
 }
 
@@ -216,23 +271,35 @@ Scene --> AnimationSystem
 AnimationSystem *-- Animation
 
 abstract class Animation{
+
     +String id
+
     +String name
+
     +Mobject target
-    +Property targetProperty
+
+    +String property
+
     +Value startValue
+
     +Value endValue
+
     +double duration
+
     +double progress
+
     +Easing easing
+
     --
     +play()
+
     +pause()
+
     +seek()
 }
 
-Animation --> Property
 Animation --> Mobject
+Animation --> Value
 
 '========================================================
 ' TRACKERS
@@ -272,19 +339,17 @@ class Tracker{
 }
 
 class Binding{
-
     +String id
-
     +Tracker tracker
-
-    +Property property
-
+    +Mobject target
+    +String property
+    --
     +transform(Value)
 
     +update()
 }
 
 Binding --> Tracker
-Binding --> Property
+Binding --> Mobject
 
 @enduml

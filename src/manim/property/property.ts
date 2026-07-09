@@ -8,7 +8,7 @@
 |--------------------------------------------------------------------------
 */
 
-import { Mobject } from "../mobjects/mobect";
+import { Mobject } from "../mobject/mobect";
 import { Value } from "../utils/value";
 import { PropertyKey } from "./propertykey";
 

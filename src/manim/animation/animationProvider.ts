@@ -15,7 +15,7 @@
 */
 
 import { Animation } from "./animation";
-import { Mobject } from "../mobjects/mobect";
+import { Mobject } from "../mobject/mobect";
 import { Property } from "../property/property";
 // import { Property } from "../properties/property";
 

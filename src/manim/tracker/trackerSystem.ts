@@ -1,3 +1,5 @@
+import { Tracker } from "./tracker";
+
 export class TrackerSystem {
   readonly events: TrackerEvents;
 

@@ -57,10 +57,12 @@
 
 // import { AnimationSystem } from "../animation/AnimationSystem";
 // import { TrackerSystem } from "../trackers/TrackerSystem";
-import { Mobject } from "./mobjects/mobect";
+// import { Mobject } from "./mobject/mobect";
 import { SceneEvents } from "./events";
 import { AnimationSystem } from "./animation/animationsystem";
 import { MobjectManager } from "./mobject/mobjectmanager";
+import { RenderLoop } from "./loop";
+import { Selection } from "./selection";
 // import { AnimationSystem } from "./animation/animationsystem";
 // import { RenderLoop } from "./loop";
 
@@ -99,7 +101,7 @@ export class Scene {
 
   readonly animations: AnimationSystem;
 
-  readonly trackers: TrackerSystem;
+  // readonly trackers: TrackerSystem;
 
   readonly events: SceneEvents;
 
@@ -119,6 +121,8 @@ export class Scene {
     |--------------------------------------------------------------------------
     */
 
+  private loop: RenderLoop;
+
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
 
@@ -135,10 +139,14 @@ export class Scene {
 
     this.animations = new AnimationSystem();
 
-    this.trackers = new TrackerSystem();
+    // this.trackers = new TrackerSystem();
 
     this.events = new SceneEvents();
 
+    this.loop = new RenderLoop((dt) => {
+      // console.log("dt", dt);
+      this.render();
+    });
     this.initialize();
   }
 
@@ -149,6 +157,7 @@ export class Scene {
     */
 
   private initialize(): void {
+    this.loop.start();
     this.initializeInput();
 
     this.initializeRenderer();
@@ -164,7 +173,9 @@ export class Scene {
     |--------------------------------------------------------------------------
     */
 
-  start(): void {}
+  start(): void {
+    console.log("Scene started");
+  }
 
   stop(): void {}
 
@@ -179,11 +190,11 @@ export class Scene {
   update(dt: number) {
     this.animations.update(dt);
 
-    this.trackers.update();
+    // this.trackers.update();
 
-    for (const object of this.mobjects.all()) {
-      object.update(dt);
-    }
+    // for (const object of this.mobjects.all()) {
+    //   object.update(dt);
+    // }
 
     this.render();
   }
@@ -191,7 +202,7 @@ export class Scene {
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    for (const object of this.mobjects.all()) {
+    for (const object of this.mobjects.mobjects.values()) {
       if (!object.visible) {
         continue;
       }
@@ -218,7 +229,7 @@ export class Scene {
     |--------------------------------------------------------------------------
     */
 
-  findMobject(id: string): Mobject | undefined {
-    return this.mobjects.find(id);
-  }
+  // findMobject(id: string): Mobject | undefined {
+  //   return this.mobjects.find(id);
+  // }
 }

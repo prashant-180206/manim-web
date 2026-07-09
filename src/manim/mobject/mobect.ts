@@ -32,13 +32,16 @@
 // import { AnimationProvider } from "../animation/AnimationProvider";
 import { AnimationProvider } from "../animation/animationProvider";
 import { PropertyController } from "../property/propertycontroller";
+import { BaseProperty } from "../property/proprertytypes";
+import { Value } from "../utils/value";
+import { Vector } from "../utils/vector";
 
 export abstract class Mobject {
   readonly id: string;
 
   name: string;
 
-  readonly properties = new PropertyController();
+  protected propertyController: PropertyController<BaseProperty>;
 
   readonly animations = new AnimationProvider(this);
 
@@ -50,8 +53,22 @@ export abstract class Mobject {
 
   constructor(id: string, name: string) {
     this.id = id;
-
     this.name = name;
+    this.propertyController = new PropertyController({
+      opacity: new Value(1),
+      position: new Value(new Vector(0, 0)),
+      zindex: new Value(0),
+      scale: new Value(new Vector(1, 1)),
+      color: new Value("red"),
+    });
+  }
+
+  get properties(): BaseProperty {
+    return this.propertyController.properties;
+  }
+
+  get scale(): Vector {
+    return this.properties.scale.get();
   }
 
   /*
@@ -60,7 +77,7 @@ export abstract class Mobject {
     |--------------------------------------------------------------------------
     */
 
-  update(dt: number): void {}
+  update(_dt: number): void {}
 
   /*
     |--------------------------------------------------------------------------

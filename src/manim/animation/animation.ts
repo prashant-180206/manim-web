@@ -23,7 +23,7 @@
 */
 
 // import { Mobject } from "../mobjects/Mobject";
-import { Mobject } from "../mobjects/mobect";
+import { Mobject } from "../mobject/mobect";
 import { Property } from "../property/property";
 import { Value } from "../utils/value";
 // import { Property } from "../properties/Property";
