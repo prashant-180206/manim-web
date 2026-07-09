@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Scene } from "../manim/scene";
 // import { Rectangle } from "../manim/mobject/rect";
-import { MobjectName } from "../manim/mobject/mobjectName";
+import { MobjectName } from "../manim/mobject/helpers/mobjectName";
 import { Rectangle } from "../manim/mobject/rect";
 import { Vector } from "../manim/utils/vector";
 // import Scene from "./scene";
@@ -48,14 +48,14 @@ export default function Home() {
       </button>
       <button
         onClick={() => {
-          scalevect.current?.modify(
-            scalevect.current.x + 0.1,
-            scalevect.current.y + 0.1,
-          );
+          const latexText = scene.mobjects.add(MobjectName.LatexText);
+          console.log("Added LatexText", latexText);
+          scalevect.current = latexText.scale;
+
           console.log("Changed scale to", scalevect.current);
         }}
       >
-        changex
+        add LatexText
       </button>
     </main>
   );

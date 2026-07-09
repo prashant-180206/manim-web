@@ -59,10 +59,11 @@
 // import { TrackerSystem } from "../trackers/TrackerSystem";
 // import { Mobject } from "./mobject/mobect";
 import { SceneEvents } from "./events";
-import { AnimationSystem } from "./animation/animationsystem";
-import { MobjectManager } from "./mobject/mobjectmanager";
+// import { AnimationSystem } from "./animation/animationSystem";
+import { MobjectManager } from "./mobject/helpers/mobjectmanager";
 import { RenderLoop } from "./loop";
 import { Selection } from "./selection";
+import { AnimationSystem } from "./animation/animationsystem";
 // import { AnimationSystem } from "./animation/animationsystem";
 // import { RenderLoop } from "./loop";
 

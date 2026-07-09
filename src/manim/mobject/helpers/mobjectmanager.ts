@@ -1,4 +1,4 @@
-import { Mobject } from "./mobect";
+import { Mobject } from ".././mobect";
 import { MobjectName } from "./mobjectName";
 import { MobjectRegistry } from "./mobjectregistry";
 
