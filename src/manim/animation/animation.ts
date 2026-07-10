@@ -1,118 +1,87 @@
-/*
-|--------------------------------------------------------------------------
-| Animation.ts
-|--------------------------------------------------------------------------
-|
-| Base class for every animation.
-|
-| Each animation controls ONE property.
-|
-|--------------------------------------------------------------------------
-*/
+// import { Mobject } from "../mobject/mobject";
 
-/*
-|--------------------------------------------------------------------------
-| Files Required
-|--------------------------------------------------------------------------
-|
-| ../mobjects/Mobject.ts
-| ../properties/Property.ts
-| ../values/Value.ts
-|
-|--------------------------------------------------------------------------
-*/
+export interface AnimationOptions {
+  duration: number;
+  onStart?: () => void;
+  onUpdate: (progress: number) => void;
+  onComplete?: () => void;
+}
 
-// import { Mobject } from "../mobjects/Mobject";
-import { Mobject } from "../mobject/mobect";
-import { Property } from "../property/property";
-import { Value } from "../utils/value";
-// import { Property } from "../properties/Property";
-// import { Value } from "../values/Value";
-
-export abstract class Animation {
+export class Animation {
   readonly id: string;
 
-  name: string;
-
-  readonly target: Mobject;
-
-  readonly property: Property<any>;
-
   duration: number;
-
   progress = 0;
 
   playing = false;
+  completed = false;
 
-  constructor(
-    id: string,
-    name: string,
-    target: Mobject,
-    property: Property<any>,
-    duration: number,
-  ) {
+  reversed = false;
+
+  private readonly onStart?;
+  private readonly onUpdate;
+  private readonly onComplete?;
+
+  constructor(id: string, options: AnimationOptions) {
     this.id = id;
 
-    this.name = name;
+    this.duration = Math.max(options.duration, 0.0001);
 
-    this.target = target;
-
-    this.property = property;
-
-    this.duration = duration;
+    this.onStart = options.onStart;
+    this.onUpdate = options.onUpdate;
+    this.onComplete = options.onComplete;
   }
 
-  /*
-    |--------------------------------------------------------------------------
-    | Playback
-    |--------------------------------------------------------------------------
-    */
+  play(reverse = false) {
+    if (this.playing) return;
 
-  play(): void {
+    this.reversed = reverse;
     this.playing = true;
+    this.completed = false;
+
+    this.onStart?.();
   }
 
-  pause(): void {
+  pause() {
     this.playing = false;
   }
 
-  stop(): void {
+  stop() {
     this.playing = false;
+    this.completed = false;
+    this.progress = this.reversed ? 1 : 0;
 
-    this.progress = 0;
+    this.onUpdate(this.progress);
   }
 
-  seek(progress: number): void {
+  seek(progress: number) {
     this.progress = Math.max(0, Math.min(1, progress));
-
-    this.apply(this.progress);
+    this.onUpdate(this.progress);
   }
 
-  update(dt: number): void {
-    if (!this.playing) {
-      return;
-    }
+  update(dt: number) {
+    if (!this.playing || this.completed) return;
 
-    this.progress += dt / this.duration;
+    const delta = dt / this.duration;
 
-    if (this.progress >= 1) {
+    this.progress += this.reversed ? -delta : delta;
+
+    if (!this.reversed && this.progress >= 1) {
       this.progress = 1;
-
       this.playing = false;
+      this.completed = true;
     }
 
-    this.apply(this.progress);
-  }
+    if (this.reversed && this.progress <= 0) {
+      this.progress = 0;
+      this.playing = false;
+      this.completed = true;
+    }
 
-  /*
-    |--------------------------------------------------------------------------
-    | Interpolation
-    |--------------------------------------------------------------------------
-    */
+    this.onUpdate(this.progress);
 
-  protected abstract interpolate(t: number): Value<any>;
-
-  protected apply(t: number): void {
-    this.property.setValue(this.interpolate(t));
+    if (this.completed) {
+      this.onComplete?.();
+    }
   }
 }

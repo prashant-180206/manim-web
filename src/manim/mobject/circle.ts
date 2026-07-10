@@ -1,6 +1,6 @@
 import { PropertyController } from "../property/propertycontroller";
 import { ShapeProperty } from "../property/proprertytypes";
-import { Value } from "../utils/value";
+import { Value, Values } from "../utils/value";
 import { Mobject } from "./mobect";
 
 interface CircleProperty extends ShapeProperty {
@@ -12,9 +12,9 @@ export class Circle extends Mobject {
     super(id, name);
     this.propertyController = new PropertyController<CircleProperty>({
       ...this.propertyController.properties,
-      radius: new Value(50),
-      strokeColor: new Value("black"),
-      strokeWidth: new Value(1),
+      radius: Values.number(50),
+      strokeColor: Values.string("black"),
+      strokeWidth: Values.number(1),
     }) as any;
   }
 
@@ -42,22 +42,5 @@ export class Circle extends Mobject {
     const dx = x - 100;
     const dy = y - 100;
     return dx * dx + dy * dy <= 50 * 50;
-  }
-  protected beginRender(ctx: CanvasRenderingContext2D) {
-    const p = this.propertyController.properties as CircleProperty;
-
-    ctx.save();
-
-    ctx.globalAlpha = p.opacity.get();
-
-    const pos = p.position.get();
-    const scale = p.scale.get();
-
-    ctx.translate(pos.x, pos.y);
-    ctx.scale(scale.x, scale.y);
-  }
-
-  protected endRender(ctx: CanvasRenderingContext2D) {
-    ctx.restore();
   }
 }

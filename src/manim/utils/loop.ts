@@ -15,7 +15,19 @@ export class RenderLoop {
 
   private previousTime = 0;
 
-  constructor(private readonly callback: (dt: number) => void) {}
+  private readonly frameDuration: number;
+
+  constructor(
+    private readonly callback: (dt: number) => void,
+    fps = 60,
+  ) {
+    this.frameDuration = 1000 / fps;
+  }
+
+  restart(): void {
+    this.stop();
+    this.start();
+  }
 
   start(): void {
     if (this.running) {
@@ -40,11 +52,14 @@ export class RenderLoop {
       return;
     }
 
-    const dt = (time - this.previousTime) / 1000;
+    const elapsed = time - this.previousTime;
 
-    this.previousTime = time;
+    if (elapsed >= this.frameDuration) {
+      // Prevent accumulated timing drift
+      this.previousTime = time - (elapsed % this.frameDuration);
 
-    this.callback(dt);
+      this.callback(elapsed / 1000);
+    }
 
     this.frameId = requestAnimationFrame(this.loop);
   };

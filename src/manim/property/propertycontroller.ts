@@ -12,7 +12,7 @@ export class PropertyController<T extends BaseProperty = BaseProperty> {
     this.properties = properties;
   }
 
-  getKeys(): (keyof T)[] {
-    return Object.keys(this.properties) as (keyof T)[];
+  getEntries(): [keyof T, T[keyof T]][] {
+    return Object.entries(this.properties) as [keyof T, T[keyof T]][];
   }
 }

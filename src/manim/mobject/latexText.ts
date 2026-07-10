@@ -14,6 +14,7 @@ export class LatexText extends Mobject {
   constructor(id: string, name: string) {
     super(id, name);
     this.generateImage();
+    this.image?.style.setProperty("color", "red");
   }
 
   private generateImage() {
@@ -32,7 +33,6 @@ export class LatexText extends Mobject {
           <div xmlns="http://www.w3.org/1999/xhtml"
                style="
                  font-size:32px;
-            
                  padding:12px;
                  display:inline-block;
                ">

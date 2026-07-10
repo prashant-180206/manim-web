@@ -33,12 +33,11 @@
 import { AnimationProvider } from "../animation/animationProvider";
 import { PropertyController } from "../property/propertycontroller";
 import { BaseProperty } from "../property/proprertytypes";
-import { Value } from "../utils/value";
-import { Vector } from "../utils/vector";
+import { Values } from "../utils/value";
+import { Vector } from "../utils/types";
 
 export abstract class Mobject {
   readonly id: string;
-
   name: string;
 
   protected propertyController: PropertyController<BaseProperty>;
@@ -46,20 +45,18 @@ export abstract class Mobject {
   readonly animations = new AnimationProvider(this);
 
   visible = true;
-
   locked = false;
-
   selected = false;
 
   constructor(id: string, name: string) {
     this.id = id;
     this.name = name;
     this.propertyController = new PropertyController({
-      opacity: new Value(1),
-      position: new Value(new Vector(0, 0)),
-      zindex: new Value(0),
-      scale: new Value(new Vector(1, 1)),
-      color: new Value("red"),
+      opacity: Values.number(1),
+      position: Values.vector({ x: 0, y: 0 }),
+      zindex: Values.number(0),
+      scale: Values.vector({ x: 1, y: 1 }),
+      color: Values.string("red"),
     });
   }
 
@@ -94,4 +91,22 @@ export abstract class Mobject {
     */
 
   abstract contains(x: number, y: number): boolean;
+
+  protected beginRender(ctx: CanvasRenderingContext2D) {
+    const p = this.propertyController.properties as BaseProperty;
+
+    ctx.save();
+
+    ctx.globalAlpha = p.opacity.get();
+
+    const pos = p.position.get();
+    const scale = p.scale.get();
+
+    ctx.translate(pos.x, pos.y);
+    ctx.scale(scale.x, scale.y);
+  }
+
+  protected endRender(ctx: CanvasRenderingContext2D) {
+    ctx.restore();
+  }
 }

@@ -3,7 +3,7 @@ import { Scene } from "../manim/scene";
 // import { Rectangle } from "../manim/mobject/rect";
 import { MobjectName } from "../manim/mobject/helpers/mobjectName";
 import { Rectangle } from "../manim/mobject/rect";
-import { Vector } from "../manim/utils/vector";
+import { Vector } from "../manim/utils/types";
 // import Scene from "./scene";
 
 export default function Home() {
