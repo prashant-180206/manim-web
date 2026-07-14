@@ -29,7 +29,7 @@ export default function Home() {
       <canvas ref={canvasRef}></canvas>
       <button
         onClick={() => {
-          const rectangle = scene.mobjects.add(MobjectName.Rectangle);
+          const rectangle = scene.mobjectManager.add(MobjectName.Rectangle);
           console.log("Added rectangle", rectangle);
           rect.current = rectangle;
           scalevect.current = rectangle.scale;
@@ -39,7 +39,7 @@ export default function Home() {
       </button>
       <button
         onClick={() => {
-          const circle = scene.mobjects.add(MobjectName.Circle);
+          const circle = scene.mobjectManager.add(MobjectName.Circle);
           console.log("Added circle", circle);
           scalevect.current = circle.scale;
         }}
@@ -48,7 +48,7 @@ export default function Home() {
       </button>
       <button
         onClick={() => {
-          const latexText = scene.mobjects.add(MobjectName.LatexText);
+          const latexText = scene.mobjectManager.add(MobjectName.LatexText);
           console.log("Added LatexText", latexText);
           scalevect.current = latexText.scale;
 

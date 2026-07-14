@@ -3,7 +3,6 @@ import { Mobject } from "./mobect";
 export class Rectangle extends Mobject {
   constructor(id: string, name: string) {
     super(id, name);
-    this.visible = true;
   }
   render(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = "blue";

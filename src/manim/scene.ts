@@ -1,72 +1,10 @@
-/*
-|--------------------------------------------------------------------------
-| Scene.ts
-|--------------------------------------------------------------------------
-|
-| Core engine of the editor.
-|
-| Owns:
-|   - HTML Canvas
-|   - Rendering Context
-|   - Render Loop
-|   - Camera
-|   - Selection
-|   - Managers
-|   - Events
-|   - Input
-|
-| Responsibilities:
-|
-| • Render all objects.
-| • Handle user interaction.
-| • Coordinate all systems.
-| • Provide object lookup.
-| • Manage active selection.
-| • Start/stop animation loop.
-|
-|--------------------------------------------------------------------------
-*/
-
-/*
-|--------------------------------------------------------------------------
-| Files Required
-|--------------------------------------------------------------------------
-|
-| ./SceneEvents.ts
-| ./Selection.ts
-| ./Camera.ts
-| ./Renderer.ts
-| ./RenderLoop.ts
-| ./InputManager.ts
-|
-| ../mobjects/Mobject.ts
-| ../mobjects/MobjectManager.ts
-|
-| ../animation/AnimationSystem.ts
-|
-| ../trackers/TrackerSystem.ts
-|
-|--------------------------------------------------------------------------
-*/
-
-// import { Selection } from "./Selection";
-// import { SceneEvents } from "./SceneEvents";
-
-// import { Mobject } from "./mobect.ts";
-// import { MobjectManager } from "../mobjects/MobjectManager";
-
-// import { AnimationSystem } from "../animation/AnimationSystem";
-// import { TrackerSystem } from "../trackers/TrackerSystem";
-// import { Mobject } from "./mobject/mobect";
 import { SceneEvents } from "./utils/events";
 // import { AnimationSystem } from "./animation/animationSystem";
 import { MobjectManager } from "./mobject/helpers/mobjectmanager";
+import { MobjectNode } from "./mobject/helpers/MobjectTree";
 import { RenderLoop } from "./utils/loop";
-import { Selection } from "./utils/selection";
+import { SelectionManager } from "./utils/selection";
 import { AnimationSystem } from "./animation/animationSystem";
-// import { AnimationSystem } from "./animation/animationsystem";
-// import { AnimationSystem } from "./animation/animationsystem";
-// import { RenderLoop } from "./loop";
 
 export class Scene {
   /*
@@ -79,43 +17,15 @@ export class Scene {
 
   readonly ctx: CanvasRenderingContext2D;
 
-  // readonly loop: RenderLoop;
+  readonly selection: SelectionManager;
 
-  //     this.loop = new RenderLoop((dt) => {
+  readonly mobjectManager: MobjectManager;
 
-  //     // this.animations.update(dt);
-
-  //     // this.trackers.update();
-
-  //     // this.render();
-
-  // })
-
-  /*
-    |--------------------------------------------------------------------------
-    | Core Systems
-    |--------------------------------------------------------------------------
-    */
-
-  readonly selection: Selection;
-
-  readonly mobjects: MobjectManager;
-
-  readonly animations: AnimationSystem;
+  readonly animationSystem: AnimationSystem;
 
   // readonly trackers: TrackerSystem;
 
   readonly events: SceneEvents;
-
-  /*
-    |--------------------------------------------------------------------------
-    | Internal State
-    |--------------------------------------------------------------------------
-    */
-
-  //   private running = false;
-
-  //   private lastFrame = 0;
 
   /*
     |--------------------------------------------------------------------------
@@ -134,19 +44,14 @@ export class Scene {
 
     this.canvas = canvas;
     this.ctx = ctx;
-
-    this.selection = new Selection();
-
-    this.mobjects = new MobjectManager();
-
-    this.animations = new AnimationSystem();
-
+    this.selection = new SelectionManager(this);
+    this.mobjectManager = new MobjectManager();
+    this.animationSystem = new AnimationSystem();
     // this.trackers = new TrackerSystem();
-
     this.events = new SceneEvents();
-
     this.loop = new RenderLoop((dt) => {
       // console.log("dt", dt);
+      this.animationSystem.update(dt);
       this.render();
     });
     this.initialize();
@@ -190,48 +95,40 @@ export class Scene {
     */
 
   update(dt: number) {
-    this.animations.update(dt);
-
-    // this.trackers.update();
-
-    // for (const object of this.mobjects.all()) {
-    //   object.update(dt);
-    // }
-
+    this.animationSystem.update(dt);
     this.render();
   }
 
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    for (const object of this.mobjects.mobjects.values()) {
-      if (!object.visible) {
-        continue;
-      }
-
-      object.render(this.ctx);
+    for (const root of this.mobjectManager.tree.roots) {
+      this.renderNode(root);
     }
   }
 
-  //   private frame = (time: number): void => {};
+  private renderNode(node: MobjectNode) {
+    const object = node.mobject;
 
-  /*
-    |--------------------------------------------------------------------------
-    | Selection
-    |--------------------------------------------------------------------------
-    */
+    if (!node.visible) return;
 
-  //   selectMobject(id: string): void {}
+    this.ctx.save();
 
-  clearSelection(): void {}
+    object.render(this.ctx);
 
-  /*
-    |--------------------------------------------------------------------------
-    | Queries
-    |--------------------------------------------------------------------------
-    */
+    for (const child of node.children) {
+      this.renderNode(child);
+    }
 
-  // findMobject(id: string): Mobject | undefined {
-  //   return this.mobjects.find(id);
-  // }
+    this.ctx.restore();
+  }
+
+  deleteSelectedMobject() {
+    const selected = this.selection.selectedMobject;
+    if (selected) {
+      this.animationSystem.removeMobject(selected.id);
+      this.mobjectManager.delete(selected);
+      this.selection.selectedMobject = null;
+    }
+  }
 }

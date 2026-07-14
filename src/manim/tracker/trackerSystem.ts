@@ -1,19 +1,16 @@
+import { Vector } from "../utils/types";
 import { Tracker } from "./tracker";
 
-export class TrackerSystem {
-  readonly events: TrackerEvents;
+export class TrackerManager {
+  private trackers: Map<string, Tracker<number | boolean | Vector>> = new Map();
 
-  add(tracker: Tracker): void;
+  addTracker(id: string, tracker: Tracker<number | boolean | Vector>): void {
+    this.trackers.set(id, tracker);
+  }
 
-  remove(tracker: Tracker): void;
+  removeTracker(id: string): void {
+    this.trackers.delete(id);
+  }
 
-  find(id: string): Tracker | undefined;
-
-  clear(): void;
-
-  invalidate(target: TrackerTarget): void;
-
-  evaluate(): void;
-
-  dispose(): void;
+  // connect
 }

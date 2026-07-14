@@ -11,59 +11,97 @@
 |--------------------------------------------------------------------------
 */
 
-/*
-|--------------------------------------------------------------------------
-| Files Required
-|--------------------------------------------------------------------------
-|
-| ../mobjects/Mobject.ts
-| ../animation/Animation.ts
-| ../trackers/Tracker.ts
-| ../properties/Property.ts
-|
-|--------------------------------------------------------------------------
-*/
+// import { Animation } from "../animation/animation";
+import { Signal } from "../events/signal";
+import { Group } from "../mobject/group";
+import { Mobject } from "../mobject/mobect";
+import { Scene } from "../scene";
 
-import { Animation } from "../animation/Animation";
-import { Mobject } from "../mobjects/Mobject";
-import { Property } from "../properties/Property";
-import { Tracker } from "../trackers/Tracker";
+export class SelectionManager {
+  scene: Scene;
+  private _selectedMobject: Mobject | null = null;
 
-export class Selection {
-  activeMobject?: Mobject;
+  editingSelection = new Set<Mobject>();
+  onSelectionChanged = new Signal<[Mobject | null]>();
 
-  activeAnimation?: Animation;
-
-  activeTracker?: Tracker;
-
-  activeProperty?: Property;
-
-  selectMobject(mobject?: Mobject): void {
-    this.clear();
-
-    this.activeMobject = mobject;
+  constructor(scene: Scene) {
+    this.scene = scene;
   }
 
-  selectAnimation(animation?: Animation): void {
-    this.clear();
-
-    this.activeAnimation = animation;
+  public get selectedMobject(): Mobject | null {
+    return this._selectedMobject;
+  }
+  public set selectedMobject(value: Mobject | null) {
+    this._selectedMobject = value;
+    this.onSelectionChanged.emit(value);
   }
 
-  selectTracker(tracker?: Tracker): void {
-    this.clear();
+  select(mousePosition: { x: number; y: number }): void {
+    this.editingSelection.clear();
 
-    this.activeTracker = tracker;
+    if (this.selectedMobject instanceof Group) {
+      for (const child of this.selectedMobject.children) {
+        if (child.contains(mousePosition.x, mousePosition.y)) {
+          this.selectedMobject = child;
+          this.onSelectionChanged.emit(child);
+          return;
+        }
+      }
+    }
+
+    const roots = this.scene.mobjectManager.tree.roots;
+
+    // Search from front to back
+    for (let i = roots.length - 1; i >= 0; i--) {
+      const mobject = roots[i].mobject;
+
+      if (mobject.contains(mousePosition.x, mousePosition.y)) {
+        this.selectedMobject = mobject;
+        this.onSelectionChanged.emit(mobject);
+        return;
+      }
+    }
+    this.selectedMobject = null;
+    this.onSelectionChanged.emit(null);
   }
 
-  selectProperty(property?: Property): void {
-    this.activeProperty = property;
+  multiselect(mousePosition: { x: number; y: number }): void {
+    const roots = this.scene.mobjectManager.tree.roots;
+
+    for (let i = roots.length - 1; i >= 0; i--) {
+      const mobject = roots[i].mobject;
+
+      if (mobject.contains(mousePosition.x, mousePosition.y)) {
+        if (this.editingSelection.has(mobject)) {
+          this.editingSelection.delete(mobject);
+        } else {
+          this.editingSelection.add(mobject);
+        }
+        this.onSelectionChanged.emit(mobject);
+        return;
+      }
+    }
   }
 
-  clear(): void {
-    this.activeMobject = undefined;
-    this.activeAnimation = undefined;
-    this.activeTracker = undefined;
-    this.activeProperty = undefined;
+  groupSelected(): void {
+    if (this.editingSelection.size < 2) return;
+
+    const group = this.scene.mobjectManager.group(
+      ...Array.from(this.editingSelection),
+    );
+
+    this.editingSelection.clear();
+    this.selectedMobject = group;
+
+    this.onSelectionChanged.emit(group);
+  }
+
+  ungroupSelected(): void {
+    if (!(this.selectedMobject instanceof Group)) return;
+
+    this.scene.mobjectManager.ungroup(this.selectedMobject);
+
+    this.selectedMobject = null;
+    this.editingSelection.clear();
   }
 }

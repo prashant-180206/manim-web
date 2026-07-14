@@ -14,11 +14,8 @@ import { PropertyKey } from "./propertykey";
 
 export abstract class Property<T> {
   readonly id: string;
-
   readonly key: PropertyKey;
-
   readonly owner: Mobject;
-
   protected value: Value<T>;
 
   constructor(id: string, key: PropertyKey, owner: Mobject, value: Value<T>) {

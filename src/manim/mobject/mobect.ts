@@ -44,19 +44,15 @@ export abstract class Mobject {
 
   readonly animations = new AnimationProvider(this);
 
-  visible = true;
-  locked = false;
-  selected = false;
-
   constructor(id: string, name: string) {
     this.id = id;
     this.name = name;
     this.propertyController = new PropertyController({
       opacity: Values.number(1),
       position: Values.vector({ x: 0, y: 0 }),
-      zindex: Values.number(0),
+      // zindex: Values.number(0),
       scale: Values.vector({ x: 1, y: 1 }),
-      color: Values.string("red"),
+      // color: Values.string("red"),
     });
   }
 
@@ -68,40 +64,18 @@ export abstract class Mobject {
     return this.properties.scale.get();
   }
 
-  /*
-    |--------------------------------------------------------------------------
-    | Lifecycle
-    |--------------------------------------------------------------------------
-    */
-
   update(_dt: number): void {}
 
-  /*
-    |--------------------------------------------------------------------------
-    | Rendering
-    |--------------------------------------------------------------------------
-    */
-
   abstract render(ctx: CanvasRenderingContext2D): void;
-
-  /*
-    |--------------------------------------------------------------------------
-    | Picking
-    |--------------------------------------------------------------------------
-    */
 
   abstract contains(x: number, y: number): boolean;
 
   protected beginRender(ctx: CanvasRenderingContext2D) {
     const p = this.propertyController.properties as BaseProperty;
-
     ctx.save();
-
     ctx.globalAlpha = p.opacity.get();
-
     const pos = p.position.get();
     const scale = p.scale.get();
-
     ctx.translate(pos.x, pos.y);
     ctx.scale(scale.x, scale.y);
   }

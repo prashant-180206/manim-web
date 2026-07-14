@@ -15,6 +15,7 @@ export class Circle extends Mobject {
       radius: Values.number(50),
       strokeColor: Values.string("black"),
       strokeWidth: Values.number(1),
+      color: Values.string("red"),
     }) as any;
   }
 

@@ -10,6 +10,7 @@ export class AnimationRegistry {
         const id = animationProvider.getUniqueId(AnimationName.FadeIn);
         const easing = input.easing.get();
         return new Animation(`${mob.id}-${id}`, {
+          mobject: mob,
           duration: input.duration.get(),
           onUpdate: (progress) => {
             const easedProgress = easing(progress);
@@ -24,6 +25,7 @@ export class AnimationRegistry {
         const id = animationProvider.getUniqueId(AnimationName.FadeOut);
         const easing = input.easing.get();
         return new Animation(`${mob.id}-${id}`, {
+          mobject: mob,
           duration: input.duration.get(),
           onUpdate: (progress) => {
             const easedProgress = easing(progress);
@@ -43,6 +45,7 @@ export class AnimationRegistry {
         const endPos = input.position.get();
 
         return new Animation(`${mob.id}-${id}`, {
+          mobject: mob,
           duration: input.duration.get(),
           onUpdate: (progress) => {
             const easing = input.easing.get();

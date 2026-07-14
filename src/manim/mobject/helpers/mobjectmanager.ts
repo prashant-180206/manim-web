@@ -1,78 +1,157 @@
-import { Mobject } from ".././mobect";
+import { Signal } from "../../events/signal";
+import { Group } from "../group";
+import { Mobject } from "../mobect";
 import { MobjectName } from "./mobjectName";
 import { MobjectRegistry } from "./mobjectregistry";
+import { MobjectNode, MobjectTree } from "./MobjectTree";
 
 export class MobjectManager {
-  //   readonly events: MobjectEvents;
-
-  //   readonly root: MobjectCollection;
-  mobjects: Map<string, Mobject> = new Map();
-
-  _idgenerator = new IdGenerator();
+  readonly tree = new MobjectTree();
+  private readonly idGenerator = new IdGenerator();
+  readonly onAdd = new Signal<[Mobject]>();
+  readonly onRemove = new Signal<[Mobject]>();
+  readonly onTreeChanged = new Signal();
 
   add(name: MobjectName): Mobject {
-    const id = this._idgenerator.generateId(name);
+    const id = this.idGenerator.generateId(name);
+
     const mobject = MobjectRegistry.makeMobject(name, id);
-    this.mobjects.set(id, mobject);
+
+    const node = new MobjectNode(mobject);
+
+    this.tree.nodes.set(node.id, node);
+    this.tree.roots.push(node);
+
+    this.onAdd.emit(mobject);
+
     return mobject;
   }
 
-  // remove(object: Mobject): void {}
+  rename(object: Mobject, newName: string): void {
+    const node = this.getNode(object.id);
 
-  //   removeById(id: string): boolean {}
-
-  clear(): void {}
-
-  has(id: string): boolean {
-    return this.mobjects.has(id);
+    node.mobject.name = newName;
   }
 
-  get(id: string): Mobject {
-    const mobject = this.mobjects.get(id);
-    if (!mobject) {
-      throw new Error(`Mobject with id ${id} not found`);
+  group(...objects: Mobject[]): Group {
+    const group = new Group(
+      this.idGenerator.generateId(MobjectName.Group),
+      "Group",
+    );
+
+    const groupNode = new MobjectNode(group);
+
+    this.tree.nodes.set(group.id, groupNode);
+
+    for (const object of objects) {
+      const node = this.getNode(object.id);
+
+      // Remove from old parent/root
+      if (node.parent) {
+        const siblings = node.parent.children;
+        siblings.splice(siblings.indexOf(node), 1);
+      } else {
+        this.tree.roots.splice(this.tree.roots.indexOf(node), 1);
+      }
+
+      // Attach to group
+      node.parent = groupNode;
+      groupNode.children.push(node);
     }
-    return mobject;
+
+    this.tree.roots.push(groupNode);
+
+    this.onAdd.emit(group);
+    this.onTreeChanged.emit();
+
+    return group;
   }
 
-  exists(object: Mobject): boolean {
-    return this.mobjects.has(object.id);
+  renameMobject(id: string, newName: string): void {
+    const node = this.getNode(id);
+    node.mobject.name = newName;
   }
 
-  // forEach(callback: (m: Mobject) => void): void {}
+  getNode(id: string): MobjectNode {
+    const node = this.tree.nodes.get(id);
+    if (!node) {
+      throw new Error(`Mobject '${id}' not found.`);
+    }
+    return node;
+  }
 
-  // update(dt: number): void {}
+  delete(object: Mobject): void {
+    const node = this.getNode(object.id);
+    this.deleteNode(node);
+    this.onRemove.emit(object);
+    this.onTreeChanged.emit();
+  }
 
-  // render(ctx: CanvasRenderingContext2D): void {}
+  private deleteNode(node: MobjectNode): void {
+    // Delete children first
+    for (const child of [...node.children]) {
+      this.deleteNode(child);
+    }
 
-  // bringToFront(object: Mobject): void {}
+    // Remove from parent/root
+    if (node.parent) {
+      const siblings = node.parent.children;
+      siblings.splice(siblings.indexOf(node), 1);
+    } else {
+      this.tree.roots = this.tree.roots.filter((r) => r !== node);
+    }
 
-  // sendToBack(object: Mobject): void {}
+    this.tree.nodes.delete(node.id);
+  }
 
-  // moveBefore(object: Mobject, reference: Mobject): void {}
+  ungroup(group: Group): void {
+    const node = this.getNode(group.id);
 
-  // moveAfter(object: Mobject, reference: Mobject): void {}
+    if (!(node.mobject instanceof Group)) {
+      throw new Error("Object is not a Group.");
+    }
 
-  //   query(): MobjectQueries {}
+    if (node.parent) {
+      const siblings = node.parent.children;
+      const index = siblings.indexOf(node);
 
-  dispose(): void {}
+      // Remove group
+      siblings.splice(index, 1);
+
+      // Insert children in same position
+      siblings.splice(index, 0, ...node.children);
+
+      // Update parents
+      for (const child of node.children) {
+        child.parent = node.parent;
+      }
+    } else {
+      const roots = this.tree.roots;
+      const index = roots.indexOf(node);
+
+      roots.splice(index, 1);
+      roots.splice(index, 0, ...node.children);
+
+      for (const child of node.children) {
+        child.parent = null;
+      }
+    }
+
+    node.children.length = 0;
+    this.tree.nodes.delete(node.id);
+    this.onRemove.emit(node.mobject);
+    this.onTreeChanged.emit();
+  }
 }
 
-// enum MobjectEvents {
-//   added,
-
-//   removed,
-
-//   reordered,
-
-//   changed,
-// }
 class IdGenerator {
-  private counts: Map<MobjectName, number> = new Map();
+  private readonly counts = new Map<MobjectName, number>();
 
   generateId(name: MobjectName): string {
-    const count = this.counts.get(name) || 0;
+    const count = this.counts.get(name) ?? 0;
+
     this.counts.set(name, count + 1);
+
     return `${name}_${count}`;
   }
 }

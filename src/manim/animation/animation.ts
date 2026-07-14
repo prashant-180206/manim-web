@@ -1,6 +1,9 @@
 // import { Mobject } from "../mobject/mobject";
 
+import { Mobject } from "../mobject/mobect";
+
 export interface AnimationOptions {
+  mobject: Mobject;
   duration: number;
   onStart?: () => void;
   onUpdate: (progress: number) => void;
@@ -9,14 +12,12 @@ export interface AnimationOptions {
 
 export class Animation {
   readonly id: string;
-
   duration: number;
   progress = 0;
-
   playing = false;
   completed = false;
-
   reversed = false;
+  target: Mobject;
 
   private readonly onStart?;
   private readonly onUpdate;
@@ -30,6 +31,7 @@ export class Animation {
     this.onStart = options.onStart;
     this.onUpdate = options.onUpdate;
     this.onComplete = options.onComplete;
+    this.target = options.mobject;
   }
 
   play(reverse = false) {

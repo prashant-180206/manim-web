@@ -2,40 +2,53 @@
 |--------------------------------------------------------------------------
 | AnimationSystem.ts
 |--------------------------------------------------------------------------
-|
-| Global animation manager for a Scene.
-|
-| Responsibilities:
-|
-| • Store animations.
-| • Update active animations.
-| • Playback controls.
-| • Timeline controls.
-|
-|--------------------------------------------------------------------------
 */
 
+import { Signal } from "../events/signal";
 import { Animation } from "./animation";
 
 export class AnimationSystem {
   private readonly animations = new Map<string, Animation>();
+  private readonly sequence = new Map<string, number>();
+  private readonly activeAnimations = new Set<Animation>();
 
-  currentIndex = 0;
+  readonly onAnimationAdded = new Signal<[Animation]>();
+  readonly onAnimationRemoved = new Signal<[Animation]>();
+
+  private totalDuration = 0;
+  private elapsedTime = 0;
 
   playing = false;
+  reversed = false;
 
   /*
-    |--------------------------------------------------------------------------
-    | Animation Management
-    |--------------------------------------------------------------------------
-    */
+  |--------------------------------------------------------------------------
+  | Animation Management
+  |--------------------------------------------------------------------------
+  */
 
   add(animation: Animation): void {
     this.animations.set(animation.id, animation);
+    this.sequence.set(animation.id, this.totalDuration);
+    this.totalDuration += animation.duration;
+    this.onAnimationAdded.emit(animation);
   }
 
   remove(id: string): void {
+    const animation = this.animations.get(id);
+    if (animation) {
+      this.onAnimationRemoved.emit(animation);
+    }
     this.animations.delete(id);
+    this.sequence.delete(id);
+  }
+
+  removeMobject(id: string): void {
+    for (const animation of this.animations.values()) {
+      if (animation.target.id === id) {
+        this.remove(animation.id);
+      }
+    }
   }
 
   find(id: string): Animation | undefined {
@@ -48,56 +61,84 @@ export class AnimationSystem {
 
   clear(): void {
     this.animations.clear();
+    this.sequence.clear();
+
+    this.activeAnimations.clear();
+
+    this.totalDuration = 0;
+    this.elapsedTime = 0;
+    this.playing = false;
   }
 
   /*
-    |--------------------------------------------------------------------------
-    | Playback
-    |--------------------------------------------------------------------------
-    */
+  |--------------------------------------------------------------------------
+  | Playback
+  |--------------------------------------------------------------------------
+  */
 
-  play(): void {
+  play(reverse = false): void {
     this.playing = true;
-
-    for (const animation of this.animations.values()) {
-      animation.play();
-    }
+    this.reversed = reverse;
   }
 
   pause(): void {
     this.playing = false;
-
-    for (const animation of this.animations.values()) {
-      animation.pause();
-    }
   }
 
   stop(): void {
     this.playing = false;
+    this.elapsedTime = this.reversed ? this.totalDuration : 0;
+
+    this.activeAnimations.clear();
 
     for (const animation of this.animations.values()) {
       animation.stop();
     }
   }
 
-  seek(progress: number): void {
-    for (const animation of this.animations.values()) {
-      animation.seek(progress);
-    }
-  }
-
-  /*
-    |--------------------------------------------------------------------------
-    | Update
-    |--------------------------------------------------------------------------
-    */
-
   update(dt: number): void {
     if (!this.playing) {
       return;
     }
 
+    // Advance global time
+    this.elapsedTime += this.reversed ? -dt : dt;
+
+    if (this.elapsedTime < 0) {
+      this.elapsedTime = 0;
+      this.playing = false;
+    }
+
+    if (this.elapsedTime > this.totalDuration) {
+      this.elapsedTime = this.totalDuration;
+      this.playing = false;
+    }
+
+    // Recompute active animations every frame
+    this.activeAnimations.clear();
+
     for (const animation of this.animations.values()) {
+      const start = this.sequence.get(animation.id);
+
+      if (start === undefined) {
+        throw new Error(
+          `Animation ${animation.id} does not have a start time.`,
+        );
+      }
+
+      const end = start + animation.duration;
+
+      if (this.elapsedTime >= start && this.elapsedTime <= end) {
+        if (!animation.playing && !animation.completed) {
+          animation.play(this.reversed);
+        }
+
+        this.activeAnimations.add(animation);
+      }
+    }
+
+    // Update active animations
+    for (const animation of this.activeAnimations) {
       animation.update(dt);
     }
   }
