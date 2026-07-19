@@ -64,6 +64,10 @@ export abstract class Mobject {
     return this.properties.scale.get();
   }
 
+  getPropertyByName(type: keyof BaseProperty) {
+    return this.propertyController.properties[type];
+  }
+
   update(_dt: number): void {}
 
   abstract render(ctx: CanvasRenderingContext2D): void;

@@ -1,16 +1,16 @@
-/*
-|--------------------------------------------------------------------------
-| PropertyKey.ts
-|--------------------------------------------------------------------------
-*/
+// // /*
+// // |--------------------------------------------------------------------------
+// // | PropertyKey.ts
+// // |--------------------------------------------------------------------------
+// // */
 
-export enum PropertyKey {
-  Position,
-  Zindex,
-  Rotation,
-  Scale,
-  Color,
-  Opacity,
-  StrokeWidth,
-  StrokeColor,
-}
+// export enum PropertyKey {
+//   Position,
+//   Zindex,
+//   Rotation,
+//   Scale,
+//   Color,
+//   Opacity,
+//   StrokeWidth,
+//   StrokeColor,
+// }
