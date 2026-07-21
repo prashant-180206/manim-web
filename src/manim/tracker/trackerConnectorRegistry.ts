@@ -1,21 +1,21 @@
 import { Mobject } from "../mobject/mobect";
-import { ValueType } from "../utils/value";
-import { TrackerConnectorName } from "./trackerconnectorNames";
+
+import { TrackerConnectionName } from "./trackerconnectorNames";
 
 export class TrackerConnectorRegistry {
   static registerBaseConnectors(mobject: Mobject) {
     mobject.trackerConnector.registerConnectorFactory(
-      TrackerConnectorName.position,
+      TrackerConnectionName.position,
       {
+        mobjectid: mobject.id,
         getValue: () => mobject.properties.position,
-        requiredParams: { relation: ValueType.string },
       },
     );
     mobject.trackerConnector.registerConnectorFactory(
-      TrackerConnectorName.scale,
+      TrackerConnectionName.scale,
       {
+        mobjectid: mobject.id,
         getValue: () => mobject.properties.scale,
-        requiredParams: { relation: ValueType.string },
       },
     );
   }

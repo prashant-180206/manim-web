@@ -1,4 +1,4 @@
-export enum TrackerConnectorName {
+export enum TrackerConnectionName {
   position = "position",
   scale = "scale",
 }

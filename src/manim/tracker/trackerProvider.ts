@@ -1,21 +1,18 @@
 import { Mobject } from "../mobject/mobect";
 // import { EasingFunction } from "../utils/easing";
 import { Vector } from "../utils/types";
-import { Value, ValueType } from "../utils/value";
-import { TrackerConnectorName } from "./trackerconnectorNames";
+import { Value } from "../utils/value";
+import { TrackerConnectionName } from "./trackerconnectorNames";
 
 interface TrackerConnectionFactory {
-  getValue: (
-    mobj: Mobject,
-    params: { [key: string]: Value<boolean> | Value<number> | Value<string> },
-  ) => Value<boolean | number | Vector>;
-  requiredParams: { relation: ValueType.string; [key: string]: ValueType };
+  mobjectid: string;
+  getValue: () => Value<boolean | number | Vector>;
 }
 
 export class TrackerProvider {
   readonly mobject: Mobject;
   private readonly connectors = new Map<
-    TrackerConnectorName,
+    TrackerConnectionName,
     TrackerConnectionFactory
   >();
 
@@ -23,24 +20,24 @@ export class TrackerProvider {
     this.mobject = mobject;
   }
 
+  getConnectorFactory(
+    connector: TrackerConnectionName,
+  ): TrackerConnectionFactory {
+    const factory = this.connectors.get(connector);
+    if (!factory) {
+      throw new Error(`Connector factory for ${connector} not found.`);
+    }
+    return factory;
+  }
+
   registerConnectorFactory(
-    connector: TrackerConnectorName,
+    connector: TrackerConnectionName,
     factory: TrackerConnectionFactory,
   ): void {
     this.connectors.set(connector, factory);
   }
 
-  deleteWithName(name: TrackerConnectorName): void {
+  deleteWithName(name: TrackerConnectionName): void {
     this.connectors.delete(name);
-  }
-
-  supportedConnectors(): {
-    name: TrackerConnectorName;
-    requiredParameters: { [key: string]: ValueType };
-  }[] {
-    return [...this.connectors.entries()].map(([name, factory]) => ({
-      name,
-      requiredParameters: factory.requiredParams,
-    }));
   }
 }

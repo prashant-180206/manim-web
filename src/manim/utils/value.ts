@@ -22,7 +22,7 @@ export enum ValueType {
 export class Value<T> {
   constructor(
     public value: T,
-    private _type: ValueType,
+    private _type: ValueType = ValueType.number,
   ) {
     this.value = value;
   }

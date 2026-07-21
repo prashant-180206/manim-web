@@ -8,298 +8,203 @@ hide empty members
 '========================================================
 
 class Scene{
-    +Selection selection
+    +canvas : HTMLCanvasElement
+    +ctx : CanvasRenderingContext2D
 
-    +MobjectManager mobjects
-    +AnimationSystem animations
-    +TrackerSystem trackers
-
-    +SceneEvents events
+    +mobjects : MobjectManager
+    +selection : SelectionManager
+    +animations : AnimationSystem
+    +trackers : TrackerSystem
+    +renderLoop : RenderLoop
 
     --
-    +selectMobject(id:String)
-    +findMobject(id:String)
-    +clearSelection()
+    +render()
+    +update(dt)
+    +dispose()
 }
 
-Scene *-- Selection
 Scene *-- MobjectManager
+Scene *-- SelectionManager
 Scene *-- AnimationSystem
 Scene *-- TrackerSystem
-Scene *-- SceneEvents
-
-class Selection{
-
-    +Mobject activeMobject
-
-    +Animation activeAnimation
-
-    +String activeProperty
-
-    --
-    +select(Mobject)
-    +clear()
-}
-
-class SceneEvents{
-
-    +onSelectionChanged()
-
-    +onMobjectAdded()
-    +onMobjectDeleted()
-
-    +onAnimationAdded()
-    +onAnimationDeleted()
-
-    +onTrackerAdded()
-    +onTrackerDeleted()
-
-    +onPropertyChanged()
-}
+Scene *-- RenderLoop
 
 '========================================================
 ' MOBJECTS
 '========================================================
 
-class MobjectManager{
-
-    -Map<String,Mobject> objects
-
-    --
-    +add(Mobject)
-    +remove(id:String)
-    +find(id:String)
-}
-
-MobjectManager *-- Mobject
-
 abstract class Mobject{
 
-    +String id
+    +id : string
+    +name : string
 
-    +String name
+    +properties : ShapeProperty
 
-    +PropertyController<BaseProperty> propertyController
+    +propertyController : PropertyController
 
-    +AnimationProvider animations
+    +animations : AnimationProvider
+
+    +trackerProvider : TrackerProvider
 
     --
+    +beginRender(ctx)
+    +endRender(ctx)
+
     +render(ctx)
+
     +contains(x,y)
+
+    +update(dt)
 }
 
-class Circle{
-
-    +PropertyController<CircleProperty> propertyController
-}
-
-class Rectangle{
-
-    +PropertyController<RectangleProperty> propertyController
-}
-
-class Polygon{
-
-    +PropertyController<PolygonProperty> propertyController
-}
-
-class Curve{
-
-    +PropertyController<CurveProperty> propertyController
-}
-
-class Line{
-
-    +PropertyController<LineProperty> propertyController
-}
-
-class Text{
-
-    +PropertyController<TextProperty> propertyController
-}
+class Circle
+class Rectangle
+class LatexText
+class Group
 
 Circle --|> Mobject
 Rectangle --|> Mobject
-Polygon --|> Mobject
-Curve --|> Mobject
-Line --|> Mobject
-Text --|> Mobject
+LatexText --|> Mobject
+Group --|> Mobject
 
 Mobject *-- PropertyController
 Mobject *-- AnimationProvider
+Mobject *-- TrackerProvider
 
 '========================================================
-' PROPERTIES
+' MOBJECT TREE
 '========================================================
 
-class PropertyController<T>{
+class MobjectManager{
 
-    +T properties
+    +tree : MobjectTree
+
+    +onAdd : Signal
+    +onRemove : Signal
+    +onTreeChanged : Signal
 
     --
-    +getKeys()
+    +add()
+    +delete()
+    +group()
+    +ungroup()
+}
+
+class MobjectTree{
+
+    +roots : MobjectNode[]
+
+    --
+    +bringForward()
+    +sendBackward()
+    +bringToFront()
+    +sendToBack()
+    +moveBefore()
+    +moveAfter()
+}
+
+class MobjectNode{
+
+    +mobject : Mobject
+
+    +parent
+    +children
+
+    +visible
+    +locked
+    +selected
+}
+
+MobjectManager *-- MobjectTree
+MobjectTree *-- MobjectNode
+MobjectNode --> Mobject
+
+'========================================================
+' PROPERTY SYSTEM
+'========================================================
+
+class PropertyController{
+
+    +properties
+
+    --
+    +getEntries()
 }
 
 interface BaseProperty{
-
-    +opacity : Value<number>
-
-    +position : Value<Vector>
-
-    +scale : Value<Vector>
-
-    +zindex : Value<number>
-
-    +color : Value<string>
+    opacity
+    position
+    scale
 }
 
 interface ShapeProperty{
-
-    +strokeColor : Value<string>
-
-    +strokeWidth : Value<number>
+    color
+    strokeColor
+    strokeWidth
 }
 
 ShapeProperty --|> BaseProperty
 
-interface CircleProperty{
-
-    +radius : Value<number>
-}
-
-CircleProperty --|> ShapeProperty
-
-interface RectangleProperty{
-
-    +width : Value<number>
-
-    +height : Value<number>
-}
-
-RectangleProperty --|> ShapeProperty
-
-interface PolygonProperty{
-
-    +points : Value<Vector[]>
-}
-
-PolygonProperty --|> ShapeProperty
-
-interface CurveProperty{
-
-    +points : Value<Vector[]>
-}
-
-CurveProperty --|> ShapeProperty
-
-interface LineProperty{
-
-    +start : Value<Vector>
-
-    +end : Value<Vector>
-}
-
-LineProperty --|> ShapeProperty
-
-interface TextProperty{
-
-    +text : Value<string>
-
-    +fontSize : Value<number>
-
-    +fontFamily : Value<string>
-}
-
-TextProperty --|> BaseProperty
-
 PropertyController --> BaseProperty
 
 '========================================================
-' VALUES
+' VALUE
 '========================================================
 
-class Value<T>{
-
-    +T value
-
-    --
-    +get()
-
-    +set(value)
+class Value{
+    +value
+    +type
 }
 
-class Vector
+class Values{
+    NumberValue
+    BooleanValue
+    StringValue
+    VectorValue
+}
 
-Value --> Vector
+Values --|> Value
 
 '========================================================
 ' ANIMATION
 '========================================================
 
-class AnimationProvider{
-
-    +supportedAnimations()
-
-    +create(
-        animationName,
-        parameters
-    )
-}
-
 class AnimationSystem{
 
-    +List<Animation> animations
+    +animations
 
-    +int currentIndex
+    +current
+
+    +playing
+
+    +reversed
+
+    +onAnimationAdded : Signal
 
     --
-    +add(Animation)
-
-    +remove(id)
-
     +play()
-
     +pause()
-
-    +reverse()
-
-    +seek(time)
+    +stop()
+    +update(dt)
 }
 
-Scene --> AnimationSystem
+class Animation{
+
+    +id
+    +duration
+    +progress
+
+    --
+    +seek()
+    +update(dt)
+}
 
 AnimationSystem *-- Animation
 
-abstract class Animation{
+class AnimationProvider
+class AnimationRegistry
 
-    +String id
-
-    +String name
-
-    +Mobject target
-
-    +String property
-
-    +Value startValue
-
-    +Value endValue
-
-    +double duration
-
-    +double progress
-
-    +Easing easing
-
-    --
-    +play()
-
-    +pause()
-
-    +seek()
-}
-
-Animation --> Mobject
-Animation --> Value
+AnimationProvider --> AnimationRegistry
 
 '========================================================
 ' TRACKERS
@@ -307,49 +212,87 @@ Animation --> Value
 
 class TrackerSystem{
 
-    -Map<String,Tracker> trackers
-
-    -Map<String,Binding> bindings
+    +dependencyGraph
 
     --
-    +addTracker(Tracker)
-
-    +removeTracker(id)
-
+    +addTracker()
+    +deleteTracker()
     +connect()
-
-    +disconnect()
+    +deleteConnection()
+    +evaluate()
 }
-
-TrackerSystem *-- Tracker
-TrackerSystem *-- Binding
 
 class Tracker{
 
-    +String id
+    +value
 
-    +String name
-
-    +Value value
-
-    --
-    +setValue(Value)
-
-    +getValue()
+    +changed : Signal
 }
 
-class Binding{
-    +String id
-    +Tracker tracker
-    +Mobject target
-    +String property
-    --
-    +transform(Value)
+class TrackerProvider
 
-    +update()
+class TrackerConnectorRegistry
+
+class DependencyGraph
+
+TrackerSystem *-- DependencyGraph
+TrackerSystem *-- Tracker
+
+TrackerProvider --> TrackerConnectorRegistry
+
+Mobject --> TrackerProvider
+
+'========================================================
+' SELECTION
+'========================================================
+
+class SelectionManager{
+
+    +selected : Set<Mobject>
+
+    +scene
+
+    --
+    +select()
+    +unselect()
+    +groupSelected()
 }
 
-Binding --> Tracker
-Binding --> Mobject
+Scene --> SelectionManager
+
+'========================================================
+' EVENTS
+'========================================================
+
+class Signal
+class Connection
+
+Signal *-- Connection
+
+Tracker --> Signal
+AnimationSystem --> Signal
+MobjectManager --> Signal
+
+'========================================================
+' RENDER
+'========================================================
+
+class RenderLoop{
+
+    --
+    +start()
+    +stop()
+    +restart()
+}
+
+RenderLoop --> Scene
+
+'========================================================
+' REGISTRIES
+'========================================================
+
+class MobjectRegistry
+class AnimationRegistry
+class TrackerConnectorRegistry
 
 @enduml

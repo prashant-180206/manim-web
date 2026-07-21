@@ -1,4 +1,4 @@
-import { SceneEvents } from "./utils/events";
+// import { SceneEvents } from "./utils/events";
 // import { AnimationSystem } from "./animation/animationSystem";
 import { MobjectManager } from "./mobject/helpers/mobjectmanager";
 import { MobjectNode } from "./mobject/helpers/MobjectTree";
@@ -28,7 +28,7 @@ export class Scene {
 
   // readonly trackers: TrackerSystem;
 
-  readonly events: SceneEvents;
+  // readonly events: SceneEvents;
 
   /*
     |--------------------------------------------------------------------------
@@ -50,14 +50,14 @@ export class Scene {
     this.selection = new SelectionManager(this);
     this.mobjectManager = new MobjectManager();
     this.animationSystem = new AnimationSystem(this);
-    this.trackerSystem = new TrackerSystem();
+    this.trackerSystem = new TrackerSystem(this);
 
     this.mobjectManager.onRemove.connect((m) => {
       this.animationSystem.removeMobject(m.id);
       this.trackerSystem.removeTracker(m.id);
     });
     // this.trackers = new TrackerSystem();
-    this.events = new SceneEvents();
+    // this.events = new SceneEvents();
     this.loop = new RenderLoop((dt) => {
       // console.log("dt", dt);
       this.animationSystem.update(dt);
