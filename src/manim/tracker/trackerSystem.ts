@@ -18,12 +18,6 @@ export class TrackerSystem {
   // Dependency graph
   private readonly graph = new DependencyGraph();
 
-  // Expression parser
-
-  /*==================================================
-   * Tracker Creation
-   *==================================================*/
-
   addNumberTracker(name: string, value: number): Tracker<number> {
     const id = "";
     const tracker = Trackers.number(value, id);
