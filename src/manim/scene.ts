@@ -5,6 +5,7 @@ import { MobjectNode } from "./mobject/helpers/MobjectTree";
 import { RenderLoop } from "./utils/loop";
 import { SelectionManager } from "./utils/selection";
 import { AnimationSystem } from "./animation/animationSystem";
+import { TrackerSystem } from "./tracker/trackerSystem";
 
 export class Scene {
   /*
@@ -22,6 +23,8 @@ export class Scene {
   readonly mobjectManager: MobjectManager;
 
   readonly animationSystem: AnimationSystem;
+
+  readonly trackerSystem: TrackerSystem;
 
   // readonly trackers: TrackerSystem;
 
@@ -46,7 +49,13 @@ export class Scene {
     this.ctx = ctx;
     this.selection = new SelectionManager(this);
     this.mobjectManager = new MobjectManager();
-    this.animationSystem = new AnimationSystem();
+    this.animationSystem = new AnimationSystem(this);
+    this.trackerSystem = new TrackerSystem();
+
+    this.mobjectManager.onRemove.connect((m) => {
+      this.animationSystem.removeMobject(m.id);
+      this.trackerSystem.removeTracker(m.id);
+    });
     // this.trackers = new TrackerSystem();
     this.events = new SceneEvents();
     this.loop = new RenderLoop((dt) => {

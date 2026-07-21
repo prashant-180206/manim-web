@@ -35,6 +35,9 @@ import { PropertyController } from "../property/propertycontroller";
 import { BaseProperty } from "../property/proprertytypes";
 import { Values } from "../utils/value";
 import { Vector } from "../utils/types";
+import { TrackerProvider } from "../tracker/trackerProvider";
+import { AnimationRegistry } from "../animation/animationRegistry";
+import { TrackerConnectorRegistry } from "../tracker/trackerConnectorRegistry";
 
 export abstract class Mobject {
   readonly id: string;
@@ -43,6 +46,7 @@ export abstract class Mobject {
   protected propertyController: PropertyController<BaseProperty>;
 
   readonly animations = new AnimationProvider(this);
+  readonly trackerConnector = new TrackerProvider(this);
 
   constructor(id: string, name: string) {
     this.id = id;
@@ -54,6 +58,8 @@ export abstract class Mobject {
       scale: Values.vector({ x: 1, y: 1 }),
       // color: Values.string("red"),
     });
+    AnimationRegistry.registerBaseAnimations(this);
+    TrackerConnectorRegistry.registerBaseConnectors(this);
   }
 
   get properties(): BaseProperty {

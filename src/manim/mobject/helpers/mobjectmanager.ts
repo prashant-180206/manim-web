@@ -29,6 +29,7 @@ export class MobjectManager {
 
   rename(object: Mobject, newName: string): void {
     const node = this.getNode(object.id);
+    // !TODO: Update the registry if needed
 
     node.mobject.name = newName;
   }

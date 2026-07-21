@@ -5,12 +5,16 @@
 */
 
 import { Signal } from "../events/signal";
+import { Scene } from "../scene";
 import { Animation } from "./animation";
+import { AnimationName } from "./animationName";
+import { AnimationInput } from "./animationProvider";
 
 export class AnimationSystem {
   private readonly animations = new Map<string, Animation>();
   private readonly sequence = new Map<string, number>();
   private readonly activeAnimations = new Set<Animation>();
+  private readonly scene: Scene;
 
   readonly onAnimationAdded = new Signal<[Animation]>();
   readonly onAnimationRemoved = new Signal<[Animation]>();
@@ -21,18 +25,36 @@ export class AnimationSystem {
   playing = false;
   reversed = false;
 
+  constructor(scene: Scene) {
+    this.scene = scene;
+  }
+
   /*
   |--------------------------------------------------------------------------
   | Animation Management
   |--------------------------------------------------------------------------
   */
 
-  add(animation: Animation): void {
-    this.animations.set(animation.id, animation);
-    this.sequence.set(animation.id, this.totalDuration);
-    this.totalDuration += animation.duration;
-    this.onAnimationAdded.emit(animation);
+  add(animation: AnimationName, input: AnimationInput): string {
+    const mobj = this.scene.selection.selectedMobject;
+    if (!mobj) {
+      throw new Error("No mobject selected to add animation.");
+    }
+    const animationInstance = mobj.animations.create(animation, input);
+    this.animations.set(animationInstance.id, animationInstance);
+    this.sequence.set(animationInstance.id, this.totalDuration);
+    this.totalDuration += animationInstance.duration;
+    this.onAnimationAdded.emit(animationInstance);
+
+    return animationInstance.id;
   }
+
+  // add(animation: Animation): void {
+  //   this.animations.set(animation.id, animation);
+  //   this.sequence.set(animation.id, this.totalDuration);
+  //   this.totalDuration += animation.duration;
+  //   this.onAnimationAdded.emit(animation);
+  // }
 
   remove(id: string): void {
     const animation = this.animations.get(id);

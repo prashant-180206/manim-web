@@ -17,15 +17,16 @@
 import { Animation } from "./animation";
 import { Mobject } from "../mobject/mobect";
 // import { Property } from "../property/property";
-import { Value, ValueType } from "../utils/value";
+import { Value, Values, ValueType } from "../utils/value";
 import { Easing, EasingFunction } from "../utils/easing";
 import { AnimationName } from "./animationName";
+import { Vector } from "../utils/types";
 // import { Property } from "../properties/property";
 
 export interface AnimationInput {
   duration: Value<number>;
   easing: EasingFunction;
-  [key: string]: Value<any>;
+  [key: string]: Value<boolean | number | Vector | ((t: number) => number)>;
 }
 
 export interface AnimationFactory {
@@ -40,8 +41,9 @@ export class AnimationProvider {
   constructor(private readonly owner: Mobject) {}
 
   getUniqueId(name: AnimationName): string {
+    // adds a unique id to the animation name to ensure that each animation instance has a unique identifier
     const id = this.idGenerator.increment(name);
-    return `${name}-${id}`;
+    return `${this.owner.id}-${name}-${id}`;
   }
 
   register(name: AnimationName, factory: Omit<AnimationFactory, "id">): void {
@@ -52,20 +54,25 @@ export class AnimationProvider {
     this.animations.delete(name);
   }
 
-  supportedAnimations(): AnimationName[] {
-    return [...this.animations.keys()];
+  supportedAnimations(): {
+    name: AnimationName;
+    requiredParameters: { [key: string]: ValueType };
+  }[] {
+    return [...this.animations.entries()].map(([name, factory]) => ({
+      name,
+      requiredParameters: factory.requiredParams,
+    }));
   }
 
-  create(name: AnimationName): Animation | null {
+  create(name: AnimationName, input: AnimationInput): Animation {
     const factory = this.animations.get(name);
     if (!factory) {
-      console.warn(`Animation "${name}" is not supported by this Mobject.`);
-      return null;
+      throw new Error(`Animation ${name} is not supported by this mobject.`);
     }
     return factory.getAnimation(this.owner, {
-      duration: new Value(1, ValueType.number),
+      ...input,
+      duration: Values.number(1),
       easing: Easing.linear,
-      // easing: Easing.linear.get(),
     });
   }
 }
