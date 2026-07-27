@@ -6,6 +6,9 @@ export interface TrackerUIData {
   name: string;
   value: number;
 
+  propertyConnections: PropertyConnectionUIData[];
+  trackerConnections: TrackerConnectionUIData[];
+
   setValue(value: number): void;
   rename(name: string): void;
   remove(): void;
@@ -35,48 +38,44 @@ export interface TrackerConnectionUIData {
 }
 
 export class TrackerUI {
+  static getTrackerNames(scene: Scene): string[] {
+    return this.getTrackers(scene).map((t) => t.name);
+  }
+
   static getTrackers(scene: Scene): TrackerUIData[] {
     const system = scene.trackerSystem;
 
-    return [...system.getTrackerInfo()].map((tracker) => ({
-      id: tracker.id,
-      name: tracker.name,
-      value: tracker.get(),
+    return [...system.getTrackerInfo()].map((meta) => ({
+      id: meta.tracker.id,
+      name: meta.tracker.name,
+      value: meta.tracker.get(),
 
-      setValue: (value) => tracker.set(value),
-      rename: (name) => (tracker.name = name),
-      remove: () => system.removeTracker(tracker.id),
-    }));
-  }
+      propertyConnections: [...meta.propertyConnections.values()].map(
+        (conn) => ({
+          id: conn.id,
 
-  static getPropertyConnections(scene: Scene): PropertyConnectionUIData[] {
-    const system = scene.trackerSystem;
+          trackerId: conn.trackerId,
+          mobjectId: conn.mobjectId,
+          property: conn.property,
+          expression: conn.expression.toString(),
+          remove: () => system.deleteConnection(conn.id),
+        }),
+      ),
 
-    return [...system.allPropertyConnections()].map((conn) => ({
-      id: conn.id,
+      trackerConnections: [...meta.trackerConnections.values()].map((conn) => ({
+        id: conn.id,
 
-      trackerId: conn.trackerId,
-      mobjectId: conn.mobjectId,
+        from: conn.from,
+        target: conn.target,
 
-      property: conn.property,
-      expression: conn.expression.toString(),
+        expression: conn.expression.toString(),
 
-      remove: () => system.deleteConnection(conn.id),
-    }));
-  }
+        remove: () => system.disconnectTrackers(conn.id),
+      })),
 
-  static getTrackerConnections(scene: Scene): TrackerConnectionUIData[] {
-    const system = scene.trackerSystem;
-
-    return [...system.allTrackerConnections()].map((conn) => ({
-      id: conn.id,
-
-      from: conn.from,
-      target: conn.target,
-
-      expression: conn.expression.toString(),
-
-      remove: () => system.disconnectTrackers(conn.id),
+      setValue: (value) => meta.tracker.set(value),
+      rename: (name) => (meta.tracker.name = name),
+      remove: () => system.removeTracker(meta.tracker.id),
     }));
   }
 

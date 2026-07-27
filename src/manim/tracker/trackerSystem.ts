@@ -24,19 +24,16 @@ interface TrackerConnectionData {
   connection: Connection<any>;
 }
 
+interface TrackerMeta {
+  tracker: Tracker;
+
+  trackerConnections: Map<string, TrackerConnectionData>;
+  propertyConnections: Map<string, PropertyConnectionData>;
+}
+
 export class TrackerSystem {
   // Trackers
-  private readonly trackers = new Map<string, Tracker>();
-
-  private readonly propertyConnections = new Map<
-    string,
-    PropertyConnectionData
-  >();
-
-  private readonly trackerConnections = new Map<
-    string,
-    TrackerConnectionData
-  >();
+  private readonly trackers = new Map<string, TrackerMeta>();
 
   constructor(
     private readonly scene: Scene,
@@ -53,50 +50,39 @@ export class TrackerSystem {
 
     tracker.name = name;
 
-    this.trackers.set(id, tracker);
+    this.trackers.set(id, {
+      tracker,
+      trackerConnections: new Map(),
+      propertyConnections: new Map(),
+    });
 
     this.graph.addNode(id);
 
     return tracker;
   }
 
-  private getTracker(id: string): Tracker {
-    const tracker = this.trackers.get(id);
-    if (!tracker) {
+  private getTrackerMeta(id: string): TrackerMeta {
+    const meta = this.trackers.get(id);
+    if (!meta) {
       throw new Error(`Tracker with id ${id} not found.`);
     }
-    return tracker;
+    return meta;
   }
 
   removeTracker(id: string): void {
-    if (!this.trackers.has(id)) return;
+    const meta = this.getTrackerMeta(id);
 
-    //
-    // remove tracker->property bindings
-    //
-
-    for (const conn of [...this.propertyConnections.values()]) {
-      if (conn.trackerId !== id) continue;
-
-      conn.connection.disconnect();
-
-      this.propertyConnections.delete(conn.id);
+    // tracker -> property
+    for (const connection of meta.propertyConnections.values()) {
+      this.deleteConnection(connection.id);
     }
 
-    //
-    // remove tracker->tracker bindings
-    //
-
-    for (const conn of [...this.trackerConnections.values()]) {
-      if (conn.from !== id && conn.target !== id) continue;
-
-      conn.connection.disconnect();
-
-      this.trackerConnections.delete(conn.id);
+    // tracker -> tracker
+    for (const connection of meta.trackerConnections.values()) {
+      this.disconnectTrackers(connection.id);
     }
 
     this.graph.removeNode(id);
-
     this.trackers.delete(id);
   }
 
@@ -105,7 +91,7 @@ export class TrackerSystem {
     trackerId: string,
     expression: string,
   ): string {
-    const tracker = this.getTracker(trackerId);
+    const meta = this.getTrackerMeta(trackerId);
 
     const mobject = this.scene.selection.selectedMobject;
     if (!mobject) {
@@ -114,19 +100,18 @@ export class TrackerSystem {
 
     const targetValue = mobject.getPropertyByName(property);
 
-    const id = this.ids.next("binding_");
-
     if (targetValue.type() !== ValueType.number) {
       throw new Error(`Property '${property}' is not a number.`);
     }
 
     const parsed = this.parser.parse(expression);
+    const id = this.ids.next("binding_");
 
-    const connection = tracker.changed.connect((val) => {
-      targetValue.set(parsed.evaluate({ t: val.get() }));
+    const connection = meta.tracker.changed.connect((value) => {
+      targetValue.set(parsed.evaluate({ t: value.get() }));
     });
 
-    this.propertyConnections.set(id, {
+    meta.propertyConnections.set(id, {
       id,
       trackerId,
       mobjectId: mobject.id,
@@ -139,26 +124,27 @@ export class TrackerSystem {
   }
 
   deleteConnection(id: string): void {
-    const connection = this.propertyConnections.get(id);
+    for (const meta of this.trackers.values()) {
+      const connection = meta.propertyConnections.get(id);
 
-    if (!connection) {
-      throw new Error(`Connection '${id}' not found.`);
+      if (!connection) continue;
+
+      connection.connection.disconnect();
+      meta.propertyConnections.delete(id);
+
+      return;
     }
 
-    connection.connection.disconnect();
-
-    this.propertyConnections.delete(id);
+    throw new Error(`Connection '${id}' not found.`);
   }
 
   deleteConnectionsForMobject(mobjectId: string): void {
-    for (const [id, connection] of this.propertyConnections) {
-      if (connection.mobjectId !== mobjectId) {
-        continue;
+    for (const meta of this.trackers.values()) {
+      for (const connection of [...meta.propertyConnections.values()]) {
+        if (connection.mobjectId !== mobjectId) continue;
+
+        this.deleteConnection(connection.id);
       }
-
-      connection.connection.disconnect();
-
-      this.propertyConnections.delete(id);
     }
   }
 
@@ -167,20 +153,19 @@ export class TrackerSystem {
       throw new Error("Tracker dependency cycle detected.");
     }
 
-    const source = this.getTracker(from);
-    const destination = this.getTracker(target);
+    const source = this.getTrackerMeta(from);
+    const destination = this.getTrackerMeta(target);
 
     const parsed = this.parser.parse(expression);
-
     const id = this.ids.next("tconn_");
 
-    const connection = source.changed.connect((val) => {
-      destination.set(parsed.evaluate({ t: val.get() }));
+    const connection = source.tracker.changed.connect((value) => {
+      destination.tracker.set(parsed.evaluate({ t: value.get() }));
     });
 
     this.graph.addEdge(from, target);
 
-    this.trackerConnections.set(id, {
+    source.trackerConnections.set(id, {
       id,
       from,
       target,
@@ -192,28 +177,25 @@ export class TrackerSystem {
   }
 
   disconnectTrackers(id: string): void {
-    const connection = this.trackerConnections.get(id);
+    for (const meta of this.trackers.values()) {
+      const connection = meta.trackerConnections.get(id);
 
-    if (!connection) {
-      throw new Error(`Tracker connection '${id}' not found.`);
+      if (!connection) continue;
+
+      connection.connection.disconnect();
+
+      this.graph.removeEdge(connection.from, connection.target);
+
+      meta.trackerConnections.delete(id);
+
+      return;
     }
 
-    connection.connection.disconnect();
-
-    this.graph.removeEdge(connection.from, connection.target);
-
-    this.trackerConnections.delete(id);
+    throw new Error(`Tracker connection '${id}' not found.`);
   }
-
   // exposing to UI
   getTrackerInfo() {
     return this.trackers.values();
-  }
-  allPropertyConnections() {
-    return this.propertyConnections.values();
-  }
-  allTrackerConnections() {
-    return this.trackerConnections.values();
   }
 }
 
