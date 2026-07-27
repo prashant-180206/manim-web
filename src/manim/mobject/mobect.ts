@@ -1,35 +1,3 @@
-/*
-|--------------------------------------------------------------------------
-| Mobject.ts
-|--------------------------------------------------------------------------
-|
-| Base class for every drawable object.
-|
-| Responsibilities:
-|
-| • Store identity.
-| • Own properties.
-| • Own supported animations.
-| • Update itself.
-| • Render itself.
-| • Perform hit testing.
-|
-|--------------------------------------------------------------------------
-*/
-
-/*
-|--------------------------------------------------------------------------
-| Files Required
-|--------------------------------------------------------------------------
-|
-| ../properties/PropertyController.ts
-| ../animation/AnimationProvider.ts
-|
-|--------------------------------------------------------------------------
-*/
-
-// import { PropertyController } from "../properties/PropertyController";
-// import { AnimationProvider } from "../animation/AnimationProvider";
 import { AnimationProvider } from "../animation/animationProvider";
 import { PropertyController } from "../property/propertycontroller";
 import { BaseProperty } from "../property/proprertytypes";
@@ -54,9 +22,7 @@ export abstract class Mobject {
     this.propertyController = new PropertyController({
       opacity: Values.number(1),
       position: Values.vector({ x: 0, y: 0 }),
-      // zindex: Values.number(0),
       scale: Values.vector({ x: 1, y: 1 }),
-      // color: Values.string("red"),
     });
     AnimationRegistry.registerBaseAnimations(this);
     TrackerConnectorRegistry.registerBaseConnectors(this);

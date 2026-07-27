@@ -1,6 +1,11 @@
 export enum MobjectName {
-  Rectangle,
   Circle,
+  RegularPolygon,
+  Polygon,
+  Text,
+  ParametricPath,
+  ParametricShape,
+  PolarShape,
   LatexText,
   Group,
 }

@@ -16,7 +16,7 @@ export class Scene {
 
   readonly canvas: HTMLCanvasElement;
 
-  readonly ctx: CanvasRenderingContext2D;
+  ctx: CanvasRenderingContext2D;
 
   readonly selection: SelectionManager;
 
@@ -56,10 +56,8 @@ export class Scene {
       this.animationSystem.removeMobject(m.id);
       this.trackerSystem.removeTracker(m.id);
     });
-    // this.trackers = new TrackerSystem();
-    // this.events = new SceneEvents();
+
     this.loop = new RenderLoop((dt) => {
-      // console.log("dt", dt);
       this.animationSystem.update(dt);
       this.render();
     });

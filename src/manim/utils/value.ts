@@ -8,13 +8,15 @@
 |--------------------------------------------------------------------------
 */
 
-import { Vector } from "./types";
+import { Range, Vector } from "./types";
 
 export enum ValueType {
   number = "number",
   string = "string",
   boolean = "boolean",
   vector = "vector",
+  vectorArray = "vectorArray",
+  range = "range",
   color = "color",
   easing = "easing",
 }
@@ -53,6 +55,11 @@ export class Values {
   static vector(value: Vector) {
     return new Value<Vector>(value, ValueType.vector);
   }
+
+  static range(value: Range) {
+    return new Value<Range>(value, ValueType.range);
+  }
+
   static easing(value: (t: number) => number) {
     return new Value<(t: number) => number>(value, ValueType.easing);
   }

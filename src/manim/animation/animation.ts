@@ -1,5 +1,3 @@
-// import { Mobject } from "../mobject/mobject";
-
 import { Mobject } from "../mobject/mobect";
 
 export interface AnimationOptions {

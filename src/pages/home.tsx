@@ -1,10 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Scene } from "../manim/scene";
-// import { Rectangle } from "../manim/mobject/rect";
 import { MobjectName } from "../manim/mobject/helpers/mobjectName";
 import { Rectangle } from "../manim/mobject/rect";
 import { Vector } from "../manim/utils/types";
-// import Scene from "./scene";
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,6 +43,57 @@ export default function Home() {
         }}
       >
         add Circle
+      </button>
+      <button
+        onClick={() => {
+          const regularPolygon = scene.mobjectManager.add(
+            MobjectName.RegularPolygon,
+          );
+          console.log("Added RegularPolygon", regularPolygon);
+          scalevect.current = regularPolygon.scale;
+        }}
+      >
+        add RegularPolygon
+      </button>
+      <button
+        onClick={() => {
+          const polygon = scene.mobjectManager.add(MobjectName.Polygon);
+          console.log("Added Polygon", polygon);
+          scalevect.current = polygon.scale;
+        }}
+      >
+        add Polygon
+      </button>
+      <button
+        onClick={() => {
+          const text = scene.mobjectManager.add(MobjectName.Text);
+          console.log("Added Text", text);
+          scalevect.current = text.scale;
+        }}
+      >
+        add Text
+      </button>
+      <button
+        onClick={() => {
+          const parametricPath = scene.mobjectManager.add(
+            MobjectName.ParametricPath,
+          );
+          console.log("Added ParametricPath", parametricPath);
+          scalevect.current = parametricPath.scale;
+        }}
+      >
+        add ParametricPath
+      </button>
+      <button
+        onClick={() => {
+          const parametricShape = scene.mobjectManager.add(
+            MobjectName.ParametricShape,
+          );
+          console.log("Added ParametricShape", parametricShape);
+          scalevect.current = parametricShape.scale;
+        }}
+      >
+        add ParametricShape
       </button>
       <button
         onClick={() => {
