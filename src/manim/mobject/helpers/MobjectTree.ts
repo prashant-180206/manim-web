@@ -106,6 +106,7 @@ export class MobjectTree {
     this.move(list, from, index);
   }
 }
+
 export class MobjectNode {
   readonly mobject: Mobject;
 

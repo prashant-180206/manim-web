@@ -1,9 +1,3 @@
-/*
-|--------------------------------------------------------------------------
-| PropertyController.ts
-|--------------------------------------------------------------------------
-*/
-
 import { BaseProperty } from "./proprertytypes";
 
 export class PropertyController<T extends BaseProperty = BaseProperty> {

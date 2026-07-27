@@ -2,8 +2,8 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import katexCss from "katex/dist/katex.min.css?inline";
 
-import { PropertyController } from "../property/propertycontroller";
-import { BaseProperty } from "../property/proprertytypes";
+import { PropertyController } from "./helpers/propertycontroller";
+import { BaseProperty } from "./helpers/proprertytypes";
 import { Value, Values } from "../utils/value";
 import { Mobject } from "./mobect";
 

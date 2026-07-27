@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Scene } from "../manim/scene";
 import { MobjectName } from "../manim/mobject/helpers/mobjectName";
-import { Rectangle } from "../manim/mobject/rect";
 import { Vector } from "../manim/utils/types";
 
 export default function Home() {
@@ -19,22 +18,11 @@ export default function Home() {
     }
   }, [canvasRef]);
 
-  const rect = useRef<Rectangle | null>(null);
   const scalevect = useRef<Vector | null>(null);
 
   return (
     <main>
       <canvas ref={canvasRef}></canvas>
-      <button
-        onClick={() => {
-          const rectangle = scene.mobjectManager.add(MobjectName.Rectangle);
-          console.log("Added rectangle", rectangle);
-          rect.current = rectangle;
-          scalevect.current = rectangle.scale;
-        }}
-      >
-        add Rectangle
-      </button>
       <button
         onClick={() => {
           const circle = scene.mobjectManager.add(MobjectName.Circle);

@@ -68,6 +68,57 @@ export class MobjectManager {
     return group;
   }
 
+  addToGroup(groupId: string, ...objects: Mobject[]): Group {
+    const groupNode = this.getNode(groupId);
+    if (!(groupNode.mobject instanceof Group)) {
+      throw new Error(`Mobject '${groupId}' is not a Group.`);
+    }
+
+    for (const object of objects) {
+      const node = this.getNode(object.id);
+
+      // Remove from old parent/root
+      if (node.parent) {
+        const siblings = node.parent.children;
+        siblings.splice(siblings.indexOf(node), 1);
+      } else {
+        this.tree.roots.splice(this.tree.roots.indexOf(node), 1);
+      }
+
+      // Attach to group
+      node.parent = groupNode;
+      groupNode.children.push(node);
+    }
+
+    this.tree.roots.push(groupNode);
+
+    this.onAdd.emit(groupNode.mobject);
+    this.onTreeChanged.emit();
+
+    return groupNode.mobject as Group;
+  }
+
+  removeFromGroup(groupId: string, object: Mobject): void {
+    const groupNode = this.getNode(groupId);
+    const node = this.getNode(object.id);
+
+    if (node.parent !== groupNode) {
+      throw new Error(
+        `Mobject '${object.id}' is not a child of group '${groupId}'.`,
+      );
+    }
+
+    // Remove from the group
+    const index = groupNode.children.indexOf(node);
+    groupNode.children.splice(index, 1);
+
+    // Make it a root object
+    node.parent = null;
+    this.tree.roots.push(node);
+
+    this.onTreeChanged.emit();
+  }
+
   renameMobject(id: string, newName: string): void {
     const node = this.getNode(id);
     node.mobject.name = newName;

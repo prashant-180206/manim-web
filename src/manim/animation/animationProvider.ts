@@ -1,27 +1,9 @@
-/*
-|--------------------------------------------------------------------------
-| AnimationProvider.ts
-|--------------------------------------------------------------------------
-|
-| Factory for animations supported by a Mobject.
-|
-| Responsibilities:
-|
-| • Register animation types.
-| • Report supported animations.
-| • Create animation instances.
-|
-|--------------------------------------------------------------------------
-*/
-
 import { Animation } from "./animation";
 import { Mobject } from "../mobject/mobect";
-// import { Property } from "../property/property";
 import { Value, Values, ValueType } from "../utils/value";
 import { Easing, EasingFunction } from "../utils/easing";
 import { AnimationName } from "./animationName";
 import { Vector } from "../utils/types";
-// import { Property } from "../properties/property";
 
 export interface AnimationInput {
   duration: Value<number>;

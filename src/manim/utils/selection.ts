@@ -65,6 +65,19 @@ export class SelectionManager {
     this.onSelectionChanged.emit(null);
   }
 
+  selectMobject(mobject: Mobject | null): void {
+    this.selectedMobject = mobject;
+    this.onSelectionChanged.emit(mobject);
+  }
+
+  multiselectMobject(mobject: Mobject): void {
+    if (this.editingSelection.has(mobject)) {
+      this.editingSelection.delete(mobject);
+    } else {
+      this.editingSelection.add(mobject);
+    }
+  }
+
   multiselect(mousePosition: { x: number; y: number }): void {
     const roots = this.scene.mobjectManager.tree.roots;
 

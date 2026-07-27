@@ -1,6 +1,6 @@
 import { AnimationProvider } from "../animation/animationProvider";
-import { PropertyController } from "../property/propertycontroller";
-import { BaseProperty } from "../property/proprertytypes";
+import { PropertyController } from "./helpers/propertycontroller";
+import { BaseProperty } from "./helpers/proprertytypes";
 import { Values } from "../utils/value";
 import { Vector } from "../utils/types";
 import { TrackerProvider } from "../tracker/trackerProvider";

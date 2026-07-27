@@ -1,6 +1,6 @@
 import { Parser } from "expr-eval";
-import { PropertyController } from "../property/propertycontroller";
-import { ShapeProperty } from "../property/proprertytypes";
+import { PropertyController } from "./helpers/propertycontroller";
+import { ShapeProperty } from "./helpers/proprertytypes";
 import { Value, Values } from "../utils/value";
 import { Range, Vector } from "../utils/types";
 import { Mobject } from "./mobect";

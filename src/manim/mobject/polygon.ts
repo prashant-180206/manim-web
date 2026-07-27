@@ -1,5 +1,5 @@
-import { PropertyController } from "../property/propertycontroller";
-import { ShapeProperty } from "../property/proprertytypes";
+import { PropertyController } from "./helpers/propertycontroller";
+import { ShapeProperty } from "./helpers/proprertytypes";
 import { Value, Values, ValueType } from "../utils/value";
 import { Vector } from "../utils/types";
 import { Mobject } from "./mobect";
