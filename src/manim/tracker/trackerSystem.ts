@@ -12,12 +12,7 @@ interface PropertyConnectionData {
   trackerId: string;
   mobjectId: string;
   property: TrackerConnectionName;
-  expression:
-    | Expression
-    | {
-        x: Expression;
-        y: Expression;
-      };
+  expression: Expression;
   connection: Connection<any>;
 }
 
@@ -108,7 +103,7 @@ export class TrackerSystem {
   addConnection(
     property: TrackerConnectionName,
     trackerId: string,
-    expression: string | { x: string; y: string },
+    expression: string,
   ): string {
     const tracker = this.getTracker(trackerId);
 
@@ -121,52 +116,24 @@ export class TrackerSystem {
 
     const id = this.ids.next("binding_");
 
-    if (typeof expression === "string") {
-      if (targetValue.type() !== ValueType.number) {
-        throw new Error(`Property '${property}' is not a number.`);
-      }
-
-      const parsed = this.parser.parse(expression);
-
-      const connection = tracker.changed.connect((val) => {
-        targetValue.set(parsed.evaluate({ t: val.get() }));
-      });
-
-      this.propertyConnections.set(id, {
-        id,
-        trackerId,
-        mobjectId: mobject.id,
-        property,
-        expression: parsed,
-        connection,
-      });
-    } else {
-      if (targetValue.type() !== ValueType.vector) {
-        throw new Error(`Property '${property}' is not a vector.`);
-      }
-
-      const parsedX = this.parser.parse(expression.x);
-      const parsedY = this.parser.parse(expression.y);
-
-      const connection = tracker.changed.connect((val) => {
-        targetValue.set({
-          x: parsedX.evaluate({ t: val.get() }),
-          y: parsedY.evaluate({ t: val.get() }),
-        } as any);
-      });
-
-      this.propertyConnections.set(id, {
-        id,
-        trackerId,
-        mobjectId: mobject.id,
-        property,
-        expression: {
-          x: parsedX,
-          y: parsedY,
-        },
-        connection,
-      });
+    if (targetValue.type() !== ValueType.number) {
+      throw new Error(`Property '${property}' is not a number.`);
     }
+
+    const parsed = this.parser.parse(expression);
+
+    const connection = tracker.changed.connect((val) => {
+      targetValue.set(parsed.evaluate({ t: val.get() }));
+    });
+
+    this.propertyConnections.set(id, {
+      id,
+      trackerId,
+      mobjectId: mobject.id,
+      property,
+      expression: parsed,
+      connection,
+    });
 
     return id;
   }
@@ -241,6 +208,12 @@ export class TrackerSystem {
   // exposing to UI
   getTrackerInfo() {
     return this.trackers.values();
+  }
+  allPropertyConnections() {
+    return this.propertyConnections.values();
+  }
+  allTrackerConnections() {
+    return this.trackerConnections.values();
   }
 }
 

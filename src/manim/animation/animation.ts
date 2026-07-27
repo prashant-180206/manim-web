@@ -1,4 +1,5 @@
 import { Mobject } from "../mobject/mobect";
+import { AnimationName } from "./animationName";
 
 export interface AnimationOptions {
   mobject: Mobject;
@@ -10,6 +11,7 @@ export interface AnimationOptions {
 
 export class Animation {
   readonly id: string;
+  readonly name: AnimationName;
   duration: number;
   progress = 0;
   playing = false;
@@ -21,8 +23,9 @@ export class Animation {
   private readonly onUpdate;
   private readonly onComplete?;
 
-  constructor(id: string, options: AnimationOptions) {
+  constructor(id: string, options: AnimationOptions, name: AnimationName) {
     this.id = id;
+    this.name = name;
 
     this.duration = Math.max(options.duration, 0.0001);
 

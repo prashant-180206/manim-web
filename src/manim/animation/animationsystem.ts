@@ -18,9 +18,19 @@ export class AnimationSystem {
 
   readonly onAnimationAdded = new Signal<[Animation]>();
   readonly onAnimationRemoved = new Signal<[Animation]>();
+  readonly onSequenceUpdated = new Signal<[Animation]>();
 
-  private totalDuration = 0;
-  private elapsedTime = 0;
+  totalDuration = 0;
+  private _currentTime = 0;
+
+  get currentTime() {
+    return this._currentTime;
+  }
+
+  setCurrentTime(time: number) {
+    this._currentTime = Math.max(0, Math.min(time, this.totalDuration));
+    this.refreshAnimations();
+  }
 
   playing = false;
   reversed = false;
@@ -48,13 +58,6 @@ export class AnimationSystem {
 
     return animationInstance.id;
   }
-
-  // add(animation: Animation): void {
-  //   this.animations.set(animation.id, animation);
-  //   this.sequence.set(animation.id, this.totalDuration);
-  //   this.totalDuration += animation.duration;
-  //   this.onAnimationAdded.emit(animation);
-  // }
 
   remove(id: string): void {
     const animation = this.animations.get(id);
@@ -88,7 +91,7 @@ export class AnimationSystem {
     this.activeAnimations.clear();
 
     this.totalDuration = 0;
-    this.elapsedTime = 0;
+    this._currentTime = 0;
     this.playing = false;
   }
 
@@ -109,12 +112,74 @@ export class AnimationSystem {
 
   stop(): void {
     this.playing = false;
-    this.elapsedTime = this.reversed ? this.totalDuration : 0;
+    this._currentTime = this.reversed ? this.totalDuration : 0;
 
     this.activeAnimations.clear();
 
     for (const animation of this.animations.values()) {
       animation.stop();
+    }
+  }
+
+  getStart(id: string): number {
+    const start = this.sequence.get(id);
+    if (start === undefined) {
+      throw new Error(`Animation ${id} does not have a start time.`);
+    }
+    return start;
+  }
+
+  moveStart(id: string, start: number): void {
+    const animation = this.find(id);
+
+    if (!animation) {
+      throw new Error("Animation not found.");
+    }
+
+    this.sequence.set(id, Math.max(0, start));
+
+    this.recalculateTotalDuration();
+    this.onSequenceUpdated.emit(animation);
+    this.refreshAnimations();
+  }
+
+  private recalculateTotalDuration(): void {
+    let max = 0;
+
+    for (const animation of this.animations.values()) {
+      const start = this.sequence.get(animation.id)!;
+      max = Math.max(max, start + animation.duration);
+    }
+
+    this.totalDuration = max;
+
+    if (this._currentTime > max) {
+      this._currentTime = max;
+    }
+  }
+
+  private refreshAnimations(): void {
+    this.activeAnimations.clear();
+
+    const entries = [...this.animations.values()].sort(
+      (a, b) => this.sequence.get(a.id)! - this.sequence.get(b.id)!,
+    );
+
+    for (const animation of entries) {
+      const start = this.sequence.get(animation.id)!;
+      const end = start + animation.duration;
+
+      if (this._currentTime < start) {
+        // Animation hasn't started yet
+        animation.seek(0);
+      } else if (this._currentTime >= end) {
+        // Animation has finished
+        animation.seek(animation.duration);
+      } else {
+        // Active animation
+        animation.seek(this._currentTime - start);
+        this.activeAnimations.add(animation);
+      }
     }
   }
 
@@ -124,15 +189,15 @@ export class AnimationSystem {
     }
 
     // Advance global time
-    this.elapsedTime += this.reversed ? -dt : dt;
+    this._currentTime += this.reversed ? -dt : dt;
 
-    if (this.elapsedTime < 0) {
-      this.elapsedTime = 0;
+    if (this._currentTime < 0) {
+      this._currentTime = 0;
       this.playing = false;
     }
 
-    if (this.elapsedTime > this.totalDuration) {
-      this.elapsedTime = this.totalDuration;
+    if (this._currentTime > this.totalDuration) {
+      this._currentTime = this.totalDuration;
       this.playing = false;
     }
 
@@ -150,7 +215,7 @@ export class AnimationSystem {
 
       const end = start + animation.duration;
 
-      if (this.elapsedTime >= start && this.elapsedTime <= end) {
+      if (this._currentTime >= start && this._currentTime <= end) {
         if (!animation.playing && !animation.completed) {
           animation.play(this.reversed);
         }

@@ -15,7 +15,7 @@ import { Scene } from "../scene";
 import { IconType } from "react-icons";
 import { MobjectNode } from "../mobject/helpers/MobjectTree";
 
-interface MobjectUIData {
+interface MobjectCreationUIData {
   name: string;
   create: () => void;
   icon: IconType;
@@ -46,7 +46,7 @@ const MobjectIcons: Record<MobjectName, IconType> = {
 };
 
 export class MobjectUI {
-  static getUIButtonData(scene: Scene): MobjectUIData[] {
+  static getMobjectCreationUIData(scene: Scene): MobjectCreationUIData[] {
     return Object.values(MobjectName).map((name) => ({
       name,
       create: () => scene.mobjectManager.add(name),

@@ -11,7 +11,7 @@ export interface AnimationInput {
   [key: string]: Value<boolean | number | Vector | ((t: number) => number)>;
 }
 
-export interface AnimationFactory {
+interface AnimationFactory {
   getAnimation: (mob: Mobject, obj: AnimationInput) => Animation;
   requiredParams: { [key: string]: ValueType };
 }

@@ -11,14 +11,18 @@ export class AnimationRegistry {
       getAnimation: (mob, input) => {
         const id = animationProvider.getUniqueId(AnimationName.FadeIn);
         const easing = input.easing.get();
-        return new Animation(id, {
-          mobject: mob,
-          duration: input.duration.get(),
-          onUpdate: (progress) => {
-            const easedProgress = easing(progress);
-            mob.properties.opacity.set(easedProgress);
+        return new Animation(
+          id,
+          {
+            mobject: mob,
+            duration: input.duration.get(),
+            onUpdate: (progress) => {
+              const easedProgress = easing(progress);
+              mob.properties.opacity.set(easedProgress);
+            },
           },
-        });
+          AnimationName.FadeIn,
+        );
       },
       requiredParams: {},
     });
@@ -35,6 +39,7 @@ export class AnimationRegistry {
               mob.properties.opacity.set(1 - easedProgress);
             },
           },
+          AnimationName.FadeOut,
         );
       },
       requiredParams: {},
@@ -48,18 +53,22 @@ export class AnimationRegistry {
         const startPos = mob.properties.position.get();
         const endPos = input.position.get() as Vector;
 
-        return new Animation(id, {
-          mobject: mob,
-          duration: input.duration.get(),
-          onUpdate: (progress) => {
-            const easing = input.easing.get();
-            const easedProgress = easing(progress);
-            mob.properties.position.set({
-              x: startPos.x + (endPos.x - startPos.x) * easedProgress,
-              y: startPos.y + (endPos.y - startPos.y) * easedProgress,
-            });
+        return new Animation(
+          id,
+          {
+            mobject: mob,
+            duration: input.duration.get(),
+            onUpdate: (progress) => {
+              const easing = input.easing.get();
+              const easedProgress = easing(progress);
+              mob.properties.position.set({
+                x: startPos.x + (endPos.x - startPos.x) * easedProgress,
+                y: startPos.y + (endPos.y - startPos.y) * easedProgress,
+              });
+            },
           },
-        });
+          AnimationName.MoveTo,
+        );
       },
       requiredParams: { position: ValueType.vector },
     });
