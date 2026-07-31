@@ -1,13 +1,3 @@
-/*
-|--------------------------------------------------------------------------
-| Value.ts
-|--------------------------------------------------------------------------
-|
-| Base value types used by properties, trackers and animations.
-|
-|--------------------------------------------------------------------------
-*/
-
 import { Range, Vector } from "./types";
 
 export enum ValueType {
@@ -62,5 +52,9 @@ export class Values {
 
   static easing(value: (t: number) => number) {
     return new Value<(t: number) => number>(value, ValueType.easing);
+  }
+
+  static vectorArray(value: Vector[]) {
+    return new Value<Vector[]>(value, ValueType.vectorArray);
   }
 }

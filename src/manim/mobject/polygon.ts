@@ -1,6 +1,6 @@
 import { PropertyController } from "./helpers/propertycontroller";
 import { ShapeProperty } from "./helpers/proprertytypes";
-import { Value, Values, ValueType } from "../utils/value";
+import { Value, Values } from "../utils/value";
 import { Vector } from "../utils/types";
 import { Mobject } from "./mobect";
 
@@ -13,7 +13,7 @@ export class Polygon extends Mobject {
     super(id, name);
     this.propertyController = new PropertyController<PolygonProperty>({
       ...this.propertyController.properties,
-      vertices: new Value<Vector[]>(
+      vertices: Values.vectorArray(
         vertices.length > 0
           ? vertices
           : [
@@ -21,7 +21,6 @@ export class Polygon extends Mobject {
               { x: 50, y: -20 },
               { x: 20, y: 50 },
             ],
-        ValueType.vectorArray,
       ),
       strokeColor: Values.string("black"),
       strokeWidth: Values.number(1),

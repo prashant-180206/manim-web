@@ -6,33 +6,31 @@ import { Value, Values } from "./value";
  */
 export type EasingFunction = Value<(t: number) => number>;
 
-export class Easing {
+export const Easing = {
   /** No easing */
-  static readonly linear: EasingFunction = Values.easing((t) => t);
+  linear: Values.easing((t) => t),
 
   /** Starts slow, ends fast */
-  static readonly easeIn: EasingFunction = Values.easing((t) => t * t);
+  easeIn: Values.easing((t) => t * t),
 
   /** Starts fast, ends slow */
-  static readonly easeOut: EasingFunction = Values.easing(
-    (t) => 1 - (1 - t) * (1 - t),
-  );
+  easeOut: Values.easing((t) => 1 - (1 - t) * (1 - t)),
 
   /** Slow → Fast → Slow */
-  static readonly easeInOut: EasingFunction = Values.easing((t) =>
+  easeInOut: Values.easing((t) =>
     t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2,
-  );
+  ),
 
   /** Slight overshoot at the end */
-  static readonly backOut: EasingFunction = Values.easing((t) => {
+  backOut: Values.easing((t) => {
     const c1 = 1.70158;
     const c3 = c1 + 1;
 
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-  });
+  }),
 
   /** Bouncy finish */
-  static readonly bounceOut: EasingFunction = Values.easing((t) => {
+  bounceOut: Values.easing((t) => {
     const n1 = 7.5625;
     const d1 = 2.75;
 
@@ -48,5 +46,5 @@ export class Easing {
       t -= 2.625 / d1;
       return n1 * t * t + 0.984375;
     }
-  });
-}
+  }),
+};

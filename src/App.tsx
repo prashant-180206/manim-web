@@ -6,15 +6,17 @@ import { Route, Routes } from "react-router-dom";
 import Home from "./pages/home";
 import Scene from "./pages/scene";
 import { ManimProvider } from "./context/manimContext";
+import ValuesPage from "./pages/values";
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <ManimProvider>
+    <ManimProvider>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/values" element={<ValuesPage />} />
         <Route path="/scene" element={<Scene />} />
-      </ManimProvider>
-    </Routes>
+      </Routes>
+    </ManimProvider>
   );
 }
 
