@@ -6,9 +6,12 @@ import { Vector } from "../utils/types";
 import { TrackerProvider } from "../tracker/trackerProvider";
 import { AnimationRegistry } from "../animation/animationRegistry";
 import { TrackerConnectorRegistry } from "../tracker/trackerConnectorRegistry";
+import { MobjectName } from "./helpers/mobjectName";
 
 export abstract class Mobject {
   readonly id: string;
+  /** Registry kind used to rebuild the object from a saved scene. */
+  readonly kind: MobjectName;
   name: string;
 
   protected propertyController: PropertyController<BaseProperty>;
@@ -18,6 +21,7 @@ export abstract class Mobject {
 
   constructor(id: string, name: string) {
     this.id = id;
+    this.kind = name as MobjectName;
     this.name = name;
     this.propertyController = new PropertyController({
       opacity: Values.number(1),

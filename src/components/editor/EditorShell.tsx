@@ -11,11 +11,14 @@ import {
   CircleQuestionMark,
   Clapperboard,
   FileCode,
+  FileX,
+  FolderOpen,
   MonitorPlay,
   PanelBottomClose,
   PanelBottomOpen,
   PanelLeftClose,
   PanelLeftOpen,
+  Save,
   Settings,
   SlidersHorizontal,
   Terminal,
@@ -30,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -45,6 +49,7 @@ import { TimelinePanel } from "./TimelinePanel";
 import { ConsolePanel } from "./ConsolePanel";
 import {
   EditorContext,
+  formatErrorMessage,
   useEditor,
   type ConsoleEntry,
   type ConsoleLevel,
@@ -56,6 +61,17 @@ import {
   seekBy,
   togglePlayback,
 } from "./editorActions";
+import {
+  downloadSceneFile,
+  hasSceneContent,
+  readSceneFile,
+  sceneNameFromFile,
+} from "./sceneFiles";
+import {
+  applyScene,
+  clearScene,
+  serializeScene,
+} from "@/manim/serialization/sceneSerializer";
 import { KeyHint } from "./editorPrimitives";
 
 type EditorView = "scene" | "inspector" | "animations" | "trackers";
@@ -86,6 +102,8 @@ const views: ViewDefinition[] = [
 ];
 
 const shortcuts: { keys: string[]; label: string }[] = [
+  { keys: ["Ctrl", "S"], label: "Save the scene as JSON" },
+  { keys: ["Ctrl", "O"], label: "Open a scene from JSON" },
   { keys: ["Space"], label: "Play or pause the timeline" },
   { keys: ["Del"], label: "Delete the current selection" },
   { keys: ["Ctrl", "G"], label: "Group multi-selected mobjects" },
@@ -96,6 +114,31 @@ const shortcuts: { keys: string[]; label: string }[] = [
   { keys: ["Ctrl", "J"], label: "Toggle the bottom panel" },
   { keys: ["1", "–", "4"], label: "Switch sidebar views" },
 ];
+
+interface FileMenuItemProps {
+  icon: LucideIcon;
+  label: string;
+  hint?: string;
+  onSelect: () => void;
+}
+
+function FileMenuItem({ icon: Icon, label, hint, onSelect }: FileMenuItemProps) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+      onClick={onSelect}
+    >
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="flex-1 truncate">{label}</span>
+      {hint && (
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {hint}
+        </span>
+      )}
+    </button>
+  );
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -228,10 +271,14 @@ export function EditorShell({ scene }: EditorShellProps) {
   const [bottomHeight, setBottomHeight] = useState(232);
   const [bottomTab, setBottomTab] = useState<BottomTab>("timeline");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [sceneName, setSceneName] = useState("untitled.scene");
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [logs, setLogs] = useState<ConsoleEntry[]>([]);
   const [, setVersion] = useState(0);
 
   const logId = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const suppressEngineLogs = useRef(false);
 
   const refresh = useCallback(() => {
     setVersion((version) => version + 1);
@@ -254,36 +301,106 @@ export function EditorShell({ scene }: EditorShellProps) {
     });
   }, []);
 
+  const saveScene = useCallback(
+    (name = sceneName) => {
+      const targetName = name.trim() || "untitled.scene";
+
+      try {
+        const document = serializeScene(scene, targetName);
+
+        downloadSceneFile(document);
+        setSceneName(targetName);
+        setFileMenuOpen(false);
+        log("success", `Saved ${targetName}`);
+      } catch (error) {
+        log("error", `Could not save scene: ${formatErrorMessage(error)}`);
+      }
+    },
+    [scene, sceneName, log],
+  );
+
+  const openScene = useCallback(
+    async (file: File) => {
+      suppressEngineLogs.current = true;
+
+      try {
+        const document = await readSceneFile(file);
+        const summary = applyScene(scene, document);
+
+        setSceneName(sceneNameFromFile(file.name));
+        setActiveView("scene");
+        setFileMenuOpen(false);
+        log(
+          "success",
+          `Opened ${file.name} · ${summary.mobjects} mobjects, ${summary.animations} animations, ${summary.trackers} trackers`,
+        );
+      } catch (error) {
+        log("error", `Could not open scene: ${formatErrorMessage(error)}`);
+      } finally {
+        suppressEngineLogs.current = false;
+        refresh();
+      }
+    },
+    [scene, log, refresh],
+  );
+
+  const closeCurrentScene = useCallback(() => {
+    if (
+      hasSceneContent(scene) &&
+      !window.confirm("Close this scene? Unsaved changes will be lost.")
+    ) {
+      return;
+    }
+
+    suppressEngineLogs.current = true;
+    clearScene(scene);
+    suppressEngineLogs.current = false;
+
+    setSceneName("untitled.scene");
+    setFileMenuOpen(false);
+    setBottomTab("timeline");
+    refresh();
+    log("info", "Closed the scene");
+  }, [scene, log, refresh]);
+
   useEffect(() => {
     const connections = [
       scene.mobjectManager.onAdd.connect((mobject) => {
         refresh();
-        log("info", `Added ${mobject.name}`);
+        if (!suppressEngineLogs.current) log("info", `Added ${mobject.name}`);
       }),
       scene.mobjectManager.onRemove.connect((mobject) => {
         refresh();
-        log("info", `Removed ${mobject.name}`);
+        if (!suppressEngineLogs.current) {
+          log("info", `Removed ${mobject.name}`);
+        }
       }),
       scene.mobjectManager.onTreeChanged.connect(refresh),
       scene.selection.onSelectionChanged.connect(refresh),
       scene.animationSystem.onAnimationAdded.connect((animation) => {
         refresh();
-        log(
-          "success",
-          `Added ${animation.name} to ${animation.target.name}`,
-        );
+        if (!suppressEngineLogs.current) {
+          log(
+            "success",
+            `Added ${animation.name} to ${animation.target.name}`,
+          );
+        }
       }),
       scene.animationSystem.onAnimationRemoved.connect((animation) => {
         refresh();
-        log(
-          "info",
-          `Removed ${animation.name} from ${animation.target.name}`,
-        );
+        if (!suppressEngineLogs.current) {
+          log(
+            "info",
+            `Removed ${animation.name} from ${animation.target.name}`,
+          );
+        }
       }),
       scene.animationSystem.onSequenceUpdated.connect(refresh),
       scene.trackerSystem.onTrackerAdded.connect((tracker) => {
         refresh();
-        log("success", `Created tracker ${tracker.name}`);
+        if (!suppressEngineLogs.current) {
+          log("success", `Created tracker ${tracker.name}`);
+        }
       }),
       scene.trackerSystem.onTrackerRemoved.connect(refresh),
       scene.trackerSystem.onTrackerChanged.connect(refresh),
@@ -299,6 +416,18 @@ export function EditorShell({ scene }: EditorShellProps) {
 
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key;
+
+      if (modifier && key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveScene();
+        return;
+      }
+
+      if (modifier && key.toLowerCase() === "o") {
+        event.preventDefault();
+        fileInputRef.current?.click();
+        return;
+      }
 
       if (modifier && key.toLowerCase() === "b") {
         event.preventDefault();
@@ -389,7 +518,7 @@ export function EditorShell({ scene }: EditorShellProps) {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [scene, refresh, log]);
+  }, [scene, refresh, log, saveScene]);
 
   const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -486,9 +615,60 @@ export function EditorShell({ scene }: EditorShellProps) {
               </Badge>
             </div>
 
+            <Popover open={fileMenuOpen} onOpenChange={setFileMenuOpen}>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="text-muted-foreground"
+                  />
+                }
+              >
+                <FileCode /> File
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-56 gap-0.5 p-1">
+                <FileMenuItem
+                  icon={Save}
+                  label="Save scene"
+                  hint="Ctrl S"
+                  onSelect={() => saveScene()}
+                />
+                <FileMenuItem
+                  icon={FolderOpen}
+                  label="Open scene…"
+                  hint="Ctrl O"
+                  onSelect={() => {
+                    setFileMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                />
+                <Separator className="my-1" />
+                <FileMenuItem
+                  icon={FileX}
+                  label="Close scene"
+                  onSelect={closeCurrentScene}
+                />
+              </PopoverContent>
+            </Popover>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+
+                event.target.value = "";
+
+                if (file) void openScene(file);
+              }}
+            />
+
             <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
               <FileCode className="size-3.5 shrink-0" />
-              <span className="truncate">Scene — untitled.scene</span>
+              <span className="truncate">Scene — {sceneName}</span>
               <span className="text-muted-foreground/50">·</span>
               <span className="truncate">{activeViewDefinition.label}</span>
             </div>

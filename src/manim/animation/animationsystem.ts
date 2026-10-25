@@ -60,11 +60,23 @@ export class AnimationSystem {
     return animationInstance.id;
   }
 
+  /**
+   * Re-register an animation that was rebuilt from a saved scene, keeping its
+   * original timeline start.
+   */
+  restore(animation: Animation, start: number): void {
+    this.animations.set(animation.id, animation);
+    this.sequence.set(animation.id, Math.max(0, start));
+
+    this.recalculateTotalDuration();
+    this.refreshAnimations();
+    this.onAnimationAdded.emit(animation);
+  }
+
   remove(id: string): void {
     const animation = this.animations.get(id);
 
     if (!animation) return;
-
     this.animations.delete(id);
     this.sequence.delete(id);
 

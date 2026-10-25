@@ -54,11 +54,15 @@ export class AnimationProvider {
     const { duration = Values.number(1), easing = Easing.linear, ...rest } =
       input;
 
-    return factory.getAnimation(this.owner, {
+    const animation = factory.getAnimation(this.owner, {
       ...rest,
       duration,
       easing,
     });
+
+    animation.input = input;
+
+    return animation;
   }
 }
 

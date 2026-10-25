@@ -5,6 +5,7 @@ import { TrackerConnectionName } from "./trackerconnectorNames";
 import { Connection, Signal } from "../events/signal";
 import { ValueType } from "../utils/value";
 import { DependencyGraph } from "./dependencyGraph";
+import type { Mobject } from "../mobject/mobect";
 // import { Value } from "../utils/value";
 
 interface PropertyConnectionData {
@@ -49,8 +50,19 @@ export class TrackerSystem {
   private readonly parser = new Parser();
 
   addTracker(name: string, value: number): Tracker {
-    const id = this.ids.next("tracker_");
+    return this.registerTracker(this.ids.next("tracker_"), name, value);
+  }
 
+  /**
+   * Recreate a tracker from a saved scene while keeping its id, so property
+   * bindings can be restored afterwards.
+   */
+  restoreTracker(id: string, name: string, value: number): Tracker {
+    this.ids.reserve(id);
+    return this.registerTracker(id, name, value);
+  }
+
+  private registerTracker(id: string, name: string, value: number): Tracker {
     const tracker = new Tracker(value, id);
 
     tracker.name = name;
@@ -69,6 +81,12 @@ export class TrackerSystem {
     this.onTrackerAdded.emit(tracker);
 
     return tracker;
+  }
+
+  clear(): void {
+    for (const meta of [...this.trackers.values()]) {
+      this.removeTracker(meta.tracker.id);
+    }
   }
 
   private getTrackerMeta(id: string): TrackerMeta {
@@ -106,14 +124,50 @@ export class TrackerSystem {
     trackerId: string,
     expression: string,
   ): string {
-    const meta = this.getTrackerMeta(trackerId);
-
     const mobject = this.scene.selection.selectedMobject;
     if (!mobject) {
       throw new Error("No selected mobject.");
     }
 
+    return this.createPropertyConnection(
+      trackerId,
+      mobject,
+      property,
+      expression,
+    );
+  }
+
+  restorePropertyConnection(
+    trackerId: string,
+    mobjectId: string,
+    property: TrackerConnectionName,
+    expression: string,
+  ): string {
+    const mobject = this.scene.mobjectManager.getNode(mobjectId).mobject;
+
+    return this.createPropertyConnection(
+      trackerId,
+      mobject,
+      property,
+      expression,
+    );
+  }
+
+  private createPropertyConnection(
+    trackerId: string,
+    mobject: Mobject,
+    property: TrackerConnectionName,
+    expression: string,
+  ): string {
+    const meta = this.getTrackerMeta(trackerId);
+
     const targetValue = mobject.getPropertyByName(property);
+
+    if (!targetValue) {
+      throw new Error(
+        `Mobject '${mobject.id}' has no '${property}' property.`,
+      );
+    }
 
     if (targetValue.type() !== ValueType.number) {
       throw new Error(`Property '${property}' is not a number.`);
@@ -167,6 +221,22 @@ export class TrackerSystem {
   }
 
   connectTrackers(from: string, target: string, expression: string): string {
+    return this.createTrackerConnection(from, target, expression);
+  }
+
+  restoreTrackerConnection(
+    from: string,
+    target: string,
+    expression: string,
+  ): string {
+    return this.createTrackerConnection(from, target, expression);
+  }
+
+  private createTrackerConnection(
+    from: string,
+    target: string,
+    expression: string,
+  ): string {
     if (this.graph.createsCycle(from, target)) {
       throw new Error("Tracker dependency cycle detected.");
     }
@@ -226,5 +296,14 @@ class IdGenerator {
   next(prefix = ""): string {
     this.counter++;
     return prefix + this.counter.toString();
+  }
+
+  /** Ensure generated ids never collide with ids restored from a scene file. */
+  reserve(id: string): void {
+    const suffix = Number(id.match(/(\d+)$/)?.[1] ?? 0);
+
+    if (Number.isFinite(suffix)) {
+      this.counter = Math.max(this.counter, suffix);
+    }
   }
 }

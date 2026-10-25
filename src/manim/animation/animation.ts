@@ -1,4 +1,5 @@
 import { Mobject } from "../mobject/mobect";
+import type { AnimationInput } from "./animationProvider";
 import { AnimationName } from "./animationName";
 
 export interface AnimationOptions {
@@ -13,6 +14,8 @@ export class Animation {
   readonly id: string;
   readonly name: AnimationName;
   duration: number;
+  /** Inputs that produced this animation, kept for scene serialization. */
+  input?: AnimationInput;
   progress = 0;
   playing = false;
   completed = false;

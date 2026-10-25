@@ -8,6 +8,7 @@ import { TextMobject } from "../text";
 import { ParametricPath } from "../parametricPath";
 import { ParametricShape } from "../parametricShape";
 import { PolarShape } from "../polarShape";
+import { Group } from "../group";
 
 export class MobjectRegistry {
   static makeMobject(name: MobjectName, id: string): Mobject {
@@ -28,6 +29,8 @@ export class MobjectRegistry {
         return new ParametricShape(id, MobjectName.ParametricShape.toString());
       case MobjectName.LatexText:
         return new LatexText(id, MobjectName.LatexText.toString());
+      case MobjectName.Group:
+        return new Group(id, MobjectName.Group.toString());
       default:
         throw new Error(`Unknown MobjectName: ${name}`);
     }
