@@ -51,10 +51,13 @@ export class AnimationProvider {
     if (!factory) {
       throw new Error(`Animation ${name} is not supported by this mobject.`);
     }
+    const { duration = Values.number(1), easing = Easing.linear, ...rest } =
+      input;
+
     return factory.getAnimation(this.owner, {
-      ...input,
-      duration: Values.number(1),
-      easing: Easing.linear,
+      ...rest,
+      duration,
+      easing,
     });
   }
 }

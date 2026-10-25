@@ -77,6 +77,10 @@ export class MobjectManager {
     for (const object of objects) {
       const node = this.getNode(object.id);
 
+      if (node === groupNode || node.parent === groupNode) {
+        continue;
+      }
+
       // Remove from old parent/root
       if (node.parent) {
         const siblings = node.parent.children;
@@ -90,9 +94,12 @@ export class MobjectManager {
       groupNode.children.push(node);
     }
 
-    this.tree.roots.push(groupNode);
+    // The group may already be attached somewhere; only root groups need to
+    // be re-added to the root list.
+    if (!groupNode.parent && !this.tree.roots.includes(groupNode)) {
+      this.tree.roots.push(groupNode);
+    }
 
-    this.onAdd.emit(groupNode.mobject);
     this.onTreeChanged.emit();
 
     return groupNode.mobject as Group;
@@ -135,7 +142,6 @@ export class MobjectManager {
   delete(object: Mobject): void {
     const node = this.getNode(object.id);
     this.deleteNode(node);
-    this.onRemove.emit(object);
     this.onTreeChanged.emit();
   }
 
@@ -154,6 +160,10 @@ export class MobjectManager {
     }
 
     this.tree.nodes.delete(node.id);
+
+    // Emit for every node so dependent systems (animations, trackers,
+    // selection) can clean up descendants as well as the root object.
+    this.onRemove.emit(node.mobject);
   }
 
   ungroup(group: Group): void {

@@ -1,5 +1,13 @@
 import { Scene } from "../scene";
 import { TrackerConnectionName } from "../tracker/trackerconnectorNames";
+import { Mobject } from "../mobject/mobect";
+import { BaseProperty } from "../mobject/helpers/proprertytypes";
+import { ValueType } from "../utils/value";
+
+export interface TrackerPropertyOptionUIData {
+  name: TrackerConnectionName;
+  valueType: ValueType;
+}
 
 export interface TrackerUIData {
   id: string;
@@ -40,6 +48,17 @@ export interface TrackerConnectionUIData {
 export class TrackerUI {
   static getTrackerNames(scene: Scene): string[] {
     return this.getTrackers(scene).map((t) => t.name);
+  }
+
+  static getPropertyOptions(
+    mobject: Mobject | null,
+  ): TrackerPropertyOptionUIData[] {
+    if (!mobject) return [];
+
+    return mobject.trackerConnector.getConnectorNames().map((name) => ({
+      name,
+      valueType: mobject.getPropertyByName(name as keyof BaseProperty).type(),
+    }));
   }
 
   static getTrackers(scene: Scene): TrackerUIData[] {

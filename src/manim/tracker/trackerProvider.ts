@@ -37,6 +37,10 @@ export class TrackerProvider {
     this.connectors.set(connector, factory);
   }
 
+  getConnectorNames(): TrackerConnectionName[] {
+    return [...this.connectors.keys()];
+  }
+
   deleteWithName(name: TrackerConnectionName): void {
     this.connectors.delete(name);
   }

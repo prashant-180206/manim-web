@@ -97,11 +97,17 @@ export class SelectionManager {
   }
 
   groupSelected(): void {
-    if (this.editingSelection.size < 2) return;
+    // The primary selection is tracked separately from the multi-selection,
+    // so the group has to include both to match what the UI shows.
+    const selection = new Set(this.editingSelection);
 
-    const group = this.scene.mobjectManager.group(
-      ...Array.from(this.editingSelection),
-    );
+    if (this.selectedMobject) {
+      selection.add(this.selectedMobject);
+    }
+
+    if (selection.size < 2) return;
+
+    const group = this.scene.mobjectManager.group(...Array.from(selection));
 
     this.editingSelection.clear();
     this.selectedMobject = group;

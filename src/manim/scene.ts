@@ -4,7 +4,7 @@ import { MobjectManager } from "./mobject/helpers/mobjectmanager";
 import { MobjectNode } from "./mobject/helpers/MobjectTree";
 import { RenderLoop } from "./utils/loop";
 import { SelectionManager } from "./utils/selection";
-import { AnimationSystem } from "./animation/animationSystem";
+import { AnimationSystem } from "./animation/animationsystem";
 import { TrackerSystem } from "./tracker/trackerSystem";
 
 export class Scene {
@@ -17,6 +17,12 @@ export class Scene {
   readonly canvas: HTMLCanvasElement;
 
   ctx: CanvasRenderingContext2D;
+
+  /** Logical (CSS pixel) width of the canvas. */
+  width: number;
+
+  /** Logical (CSS pixel) height of the canvas. */
+  height: number;
 
   readonly selection: SelectionManager;
 
@@ -47,6 +53,8 @@ export class Scene {
 
     this.canvas = canvas;
     this.ctx = ctx;
+    this.width = canvas.width;
+    this.height = canvas.height;
     this.selection = new SelectionManager(this);
     this.mobjectManager = new MobjectManager();
     this.animationSystem = new AnimationSystem(this);
@@ -54,6 +62,7 @@ export class Scene {
 
     this.mobjectManager.onRemove.connect((m) => {
       this.animationSystem.removeMobject(m.id);
+      this.trackerSystem.deleteConnectionsForMobject(m.id);
       this.trackerSystem.removeTracker(m.id);
     });
 
@@ -88,12 +97,48 @@ export class Scene {
     */
 
   start(): void {
-    console.log("Scene started");
+    this.loop.start();
   }
 
-  stop(): void {}
+  stop(): void {
+    this.loop.stop();
+  }
 
-  dispose(): void {}
+  /**
+   * Resize the canvas to the given CSS dimensions while keeping rendering
+   * crisp on high-DPI displays.
+   */
+  resize(width: number, height: number, pixelRatio = 1): void {
+    const nextWidth = Math.max(1, Math.floor(width));
+    const nextHeight = Math.max(1, Math.floor(height));
+    const ratio = Math.max(1, pixelRatio);
+
+    this.width = nextWidth;
+    this.height = nextHeight;
+
+    this.canvas.width = Math.round(nextWidth * ratio);
+    this.canvas.height = Math.round(nextHeight * ratio);
+    this.canvas.style.width = `${nextWidth}px`;
+    this.canvas.style.height = `${nextHeight}px`;
+
+    // Changing the backing-store size resets the context, so re-apply DPR.
+    this.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+
+  dispose(): void {
+    this.stop();
+    this.mobjectManager.onAdd.clear();
+    this.mobjectManager.onRemove.clear();
+    this.mobjectManager.onTreeChanged.clear();
+    this.selection.onSelectionChanged.clear();
+    this.animationSystem.onAnimationAdded.clear();
+    this.animationSystem.onAnimationRemoved.clear();
+    this.animationSystem.onSequenceUpdated.clear();
+    this.trackerSystem.onTrackerAdded.clear();
+    this.trackerSystem.onTrackerRemoved.clear();
+    this.trackerSystem.onTrackerChanged.clear();
+    this.trackerSystem.onConnectionsChanged.clear();
+  }
 
   /*
     |--------------------------------------------------------------------------
@@ -107,7 +152,7 @@ export class Scene {
   }
 
   render() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.clearRect(0, 0, this.width, this.height);
 
     for (const root of this.mobjectManager.tree.roots) {
       this.renderNode(root);
@@ -135,6 +180,7 @@ export class Scene {
     if (selected) {
       this.animationSystem.removeMobject(selected.id);
       this.mobjectManager.delete(selected);
+      this.selection.editingSelection.clear();
       this.selection.selectedMobject = null;
     }
   }

@@ -2,7 +2,7 @@ import { Tracker } from "./tracker";
 import { Expression, Parser } from "expr-eval";
 import { Scene } from "../scene";
 import { TrackerConnectionName } from "./trackerconnectorNames";
-import { Connection } from "../events/signal";
+import { Connection, Signal } from "../events/signal";
 import { ValueType } from "../utils/value";
 import { DependencyGraph } from "./dependencyGraph";
 // import { Value } from "../utils/value";
@@ -35,6 +35,11 @@ export class TrackerSystem {
   // Trackers
   private readonly trackers = new Map<string, TrackerMeta>();
 
+  readonly onTrackerAdded = new Signal<[Tracker]>();
+  readonly onTrackerRemoved = new Signal<[string]>();
+  readonly onTrackerChanged = new Signal<[Tracker]>();
+  readonly onConnectionsChanged = new Signal();
+
   constructor(
     private readonly scene: Scene,
     private readonly ids = new IdGenerator(),
@@ -56,7 +61,12 @@ export class TrackerSystem {
       propertyConnections: new Map(),
     });
 
+    tracker.changed.connect(() => {
+      this.onTrackerChanged.emit(tracker);
+    });
+
     this.graph.addNode(id);
+    this.onTrackerAdded.emit(tracker);
 
     return tracker;
   }
@@ -70,7 +80,11 @@ export class TrackerSystem {
   }
 
   removeTracker(id: string): void {
-    const meta = this.getTrackerMeta(id);
+    const meta = this.trackers.get(id);
+
+    // Trackers are also removed for deleted mobjects, which usually have no
+    // tracker associated with their id.
+    if (!meta) return;
 
     // tracker -> property
     for (const connection of meta.propertyConnections.values()) {
@@ -84,6 +98,7 @@ export class TrackerSystem {
 
     this.graph.removeNode(id);
     this.trackers.delete(id);
+    this.onTrackerRemoved.emit(id);
   }
 
   addConnection(
@@ -120,6 +135,8 @@ export class TrackerSystem {
       connection,
     });
 
+    this.onConnectionsChanged.emit();
+
     return id;
   }
 
@@ -131,6 +148,7 @@ export class TrackerSystem {
 
       connection.connection.disconnect();
       meta.propertyConnections.delete(id);
+      this.onConnectionsChanged.emit();
 
       return;
     }
@@ -173,6 +191,8 @@ export class TrackerSystem {
       connection,
     });
 
+    this.onConnectionsChanged.emit();
+
     return id;
   }
 
@@ -187,6 +207,7 @@ export class TrackerSystem {
       this.graph.removeEdge(connection.from, connection.target);
 
       meta.trackerConnections.delete(id);
+      this.onConnectionsChanged.emit();
 
       return;
     }

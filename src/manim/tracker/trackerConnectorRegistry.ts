@@ -5,6 +5,13 @@ import { TrackerConnectionName } from "./trackerconnectorNames";
 export class TrackerConnectorRegistry {
   static registerBaseConnectors(mobject: Mobject) {
     mobject.trackerConnector.registerConnectorFactory(
+      TrackerConnectionName.opacity,
+      {
+        mobjectid: mobject.id,
+        getValue: () => mobject.properties.opacity,
+      },
+    );
+    mobject.trackerConnector.registerConnectorFactory(
       TrackerConnectionName.position,
       {
         mobjectid: mobject.id,

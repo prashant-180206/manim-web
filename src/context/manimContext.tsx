@@ -1,4 +1,10 @@
-import { createContext, useContext, ReactNode, useRef, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  type ReactNode,
+} from "react";
 import { Scene } from "../manim/scene";
 
 interface ManimContextType {
@@ -12,19 +18,21 @@ interface ManimProviderProps {
 }
 
 export function ManimProvider({ children }: ManimProviderProps) {
-  const scene = useRef<Scene>(null);
+  const [scene, setScene] = useState<Scene | null>(null);
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
-    scene.current = new Scene(canvas);
+    const instance = new Scene(canvas);
+
+    setScene(instance);
+
+    return () => {
+      instance.dispose();
+    };
   }, []);
 
   return (
-    <ManimContext.Provider
-      value={{
-        scene: scene.current,
-      }}
-    >
+    <ManimContext.Provider value={{ scene }}>
       {children}
     </ManimContext.Provider>
   );

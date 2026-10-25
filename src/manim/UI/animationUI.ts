@@ -12,7 +12,7 @@ import {
 } from "react-icons/fa6";
 import { MdVisibility, MdVisibilityOff } from "react-icons/md";
 
-interface AnimCreationUiData {
+export interface AnimCreationUiData {
   name: AnimationName;
   requiredParameters: { [key: string]: ValueType };
   create: (input: AnimationInput) => void;
@@ -39,7 +39,7 @@ export interface AnimationItemUIData {
 export interface AnimationTimelineUIData {
   totalDuration: number;
 
-  play(): void;
+  play(reverse?: boolean): void;
   pause(): void;
   stop(): void;
 
@@ -64,11 +64,18 @@ const AnimationIcons: Record<AnimationName, IconType> = {
 };
 
 export class AnimationUI {
-  static getAnimCreationUIData(mobj: Mobject): AnimCreationUiData[] {
+  static getAnimCreationUIData(
+    scene: Scene,
+    mobj: Mobject,
+  ): AnimCreationUiData[] {
     return mobj.animations.supportedAnimations().map((animation) => ({
       name: animation.name,
       requiredParameters: animation.requiredParameters,
-      create: (input) => mobj.animations.create(animation.name, input),
+      create: (input) => {
+        // The animation system adds animations to the current selection.
+        scene.selection.selectMobject(mobj);
+        scene.animationSystem.add(animation.name, input);
+      },
       icon: AnimationIcons[animation.name],
     }));
   }
@@ -79,7 +86,7 @@ export class AnimationUI {
     return {
       totalDuration: system.totalDuration,
 
-      play: () => system.play(),
+      play: (reverse = false) => system.play(reverse),
       pause: () => system.pause(),
       stop: () => system.stop(),
 

@@ -23,12 +23,20 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-6 text-stone-100 md:p-8">
-      <Link
-        to="/values"
-        className="inline-flex items-center justify-center rounded-2xl bg-linear-to-br from-amber-300 to-orange-500 px-4 py-3 font-semibold text-slate-950 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80"
-      >
-        Open value editor lab
-      </Link>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          to="/"
+          className="inline-flex items-center justify-center rounded-2xl bg-linear-to-br from-sky-300 to-indigo-500 px-4 py-3 font-semibold text-slate-950 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80"
+        >
+          Open Scene Studio
+        </Link>
+        <Link
+          to="/values"
+          className="inline-flex items-center justify-center rounded-2xl bg-linear-to-br from-amber-300 to-orange-500 px-4 py-3 font-semibold text-slate-950 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80"
+        >
+          Open value editor lab
+        </Link>
+      </div>
       <canvas
         ref={canvasRef}
         className="mt-6 rounded-3xl border border-white/10 bg-slate-950/75 shadow-[0_24px_60px_rgba(0,0,0,0.24)]"

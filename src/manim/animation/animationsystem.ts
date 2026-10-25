@@ -54,6 +54,7 @@ export class AnimationSystem {
     this.animations.set(animationInstance.id, animationInstance);
     this.sequence.set(animationInstance.id, this.totalDuration);
     this.totalDuration += animationInstance.duration;
+    this.refreshAnimations();
     this.onAnimationAdded.emit(animationInstance);
 
     return animationInstance.id;
@@ -61,11 +62,17 @@ export class AnimationSystem {
 
   remove(id: string): void {
     const animation = this.animations.get(id);
-    if (animation) {
-      this.onAnimationRemoved.emit(animation);
-    }
+
+    if (!animation) return;
+
     this.animations.delete(id);
     this.sequence.delete(id);
+
+    this.recalculateTotalDuration();
+    this.refreshAnimations();
+
+    this.onAnimationRemoved.emit(animation);
+    this.onSequenceUpdated.emit(animation);
   }
 
   removeMobject(id: string): void {
@@ -102,8 +109,18 @@ export class AnimationSystem {
   */
 
   play(reverse = false): void {
+    if (this.totalDuration <= 0) return;
+
+    if (reverse && this._currentTime <= 0) {
+      this._currentTime = this.totalDuration;
+    } else if (!reverse && this._currentTime >= this.totalDuration) {
+      this._currentTime = 0;
+    }
+
     this.playing = true;
     this.reversed = reverse;
+
+    this.refreshAnimations();
   }
 
   pause(): void {
@@ -112,13 +129,10 @@ export class AnimationSystem {
 
   stop(): void {
     this.playing = false;
-    this._currentTime = this.reversed ? this.totalDuration : 0;
+    this.reversed = false;
+    this._currentTime = 0;
 
-    this.activeAnimations.clear();
-
-    for (const animation of this.animations.values()) {
-      animation.stop();
-    }
+    this.refreshAnimations();
   }
 
   getStart(id: string): number {
@@ -170,14 +184,19 @@ export class AnimationSystem {
       const end = start + animation.duration;
 
       if (this._currentTime < start) {
-        // Animation hasn't started yet
+        animation.playing = false;
+        animation.completed = false;
         animation.seek(0);
       } else if (this._currentTime >= end) {
-        // Animation has finished
-        animation.seek(animation.duration);
+        animation.playing = false;
+        animation.completed = true;
+        animation.seek(1);
       } else {
-        // Active animation
-        animation.seek(this._currentTime - start);
+        const progress = (this._currentTime - start) / animation.duration;
+
+        animation.playing = this.playing;
+        animation.completed = false;
+        animation.seek(progress);
         this.activeAnimations.add(animation);
       }
     }
@@ -188,45 +207,20 @@ export class AnimationSystem {
       return;
     }
 
-    // Advance global time
+    // Advance global time. Animation progress is derived from this clock so
+    // scrubbing and playback always agree.
     this._currentTime += this.reversed ? -dt : dt;
 
-    if (this._currentTime < 0) {
+    if (this._currentTime <= 0) {
       this._currentTime = 0;
       this.playing = false;
     }
 
-    if (this._currentTime > this.totalDuration) {
+    if (this._currentTime >= this.totalDuration) {
       this._currentTime = this.totalDuration;
       this.playing = false;
     }
 
-    // Recompute active animations every frame
-    this.activeAnimations.clear();
-
-    for (const animation of this.animations.values()) {
-      const start = this.sequence.get(animation.id);
-
-      if (start === undefined) {
-        throw new Error(
-          `Animation ${animation.id} does not have a start time.`,
-        );
-      }
-
-      const end = start + animation.duration;
-
-      if (this._currentTime >= start && this._currentTime <= end) {
-        if (!animation.playing && !animation.completed) {
-          animation.play(this.reversed);
-        }
-
-        this.activeAnimations.add(animation);
-      }
-    }
-
-    // Update active animations
-    for (const animation of this.activeAnimations) {
-      animation.update(dt);
-    }
+    this.refreshAnimations();
   }
 }

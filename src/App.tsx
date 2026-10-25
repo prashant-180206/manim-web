@@ -1,6 +1,3 @@
-// import { useState } from "react";
-// import reactLogo from "./assets/react.svg";
-// import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import { Route, Routes } from "react-router-dom";
 import Home from "./pages/home";
@@ -12,9 +9,10 @@ function App() {
   return (
     <ManimProvider>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/values" element={<ValuesPage />} />
+        <Route path="/" element={<Scene />} />
         <Route path="/scene" element={<Scene />} />
+        <Route path="/playground" element={<Home />} />
+        <Route path="/values" element={<ValuesPage />} />
       </Routes>
     </ManimProvider>
   );
