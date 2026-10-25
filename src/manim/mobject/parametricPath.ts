@@ -24,9 +24,9 @@ export class ParametricPath extends Mobject {
       tMin: Values.number(0),
       tMax: Values.number(2 * Math.PI),
       samples: Values.number(200),
-      strokeColor: Values.string("black"),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(2),
-      color: Values.string("transparent"),
+      color: Values.color("#000000"),
     }) as any;
   }
 
@@ -50,7 +50,7 @@ export class ParametricPath extends Mobject {
 
     if (p.strokeWidth.get() > 0) {
       ctx.strokeStyle = p.strokeColor.get();
-      ctx.lineWidth = p.strokeWidth.get();
+      this.applyStrokeWidth(ctx, p.strokeWidth.get());
       ctx.stroke();
     }
 

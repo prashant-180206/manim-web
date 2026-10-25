@@ -2,6 +2,7 @@ import { PropertyController } from "./helpers/propertycontroller";
 import { ShapeProperty } from "./helpers/proprertytypes";
 import { Value, Values } from "../utils/value";
 import { Mobject } from "./mobect";
+import { PIXELS_PER_UNIT } from "../utils/units";
 
 interface TextMobjectProperty extends ShapeProperty {
   text: Value<string>;
@@ -17,9 +18,9 @@ export class TextMobject extends Mobject {
       text: Values.string(text),
       fontSize: Values.number(24),
       fontFamily: Values.string("sans-serif"),
-      strokeColor: Values.string("black"),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(0),
-      color: Values.string("black"),
+      color: Values.color("#000000"),
     }) as any;
   }
 
@@ -30,19 +31,24 @@ export class TextMobject extends Mobject {
 
     this.beginRender(ctx);
 
+    // Work in a pixel-sized local space so the text is upright and stays
+    // centred. fontSize and strokeWidth are screen styles, not design units.
+    ctx.save();
+    ctx.scale(1 / PIXELS_PER_UNIT, -1 / PIXELS_PER_UNIT);
     ctx.font = `${fontSize}px ${p.fontFamily.get()}`;
     ctx.textBaseline = "alphabetic";
     const metrics = ctx.measureText(text);
 
     ctx.fillStyle = p.color.get();
-    ctx.fillText(text, -metrics.width / 2, fontSize * 0.8);
+    ctx.fillText(text, -metrics.width / 2, fontSize * 0.35);
+    ctx.restore();
 
     this.endRender(ctx);
   }
 
   contains(x: number, y: number): boolean {
     const p = this.propertyController.properties as TextMobjectProperty;
-    const text = p.text.get();
+    const point = this.worldToLocal(x, y);
     const fontSize = p.fontSize.get();
 
     const canvas = document.createElement("canvas");
@@ -52,13 +58,9 @@ export class TextMobject extends Mobject {
     }
 
     ctx.font = `${fontSize}px ${p.fontFamily.get()}`;
-    const metrics = ctx.measureText(text);
+    const width = ctx.measureText(p.text.get()).width / PIXELS_PER_UNIT;
+    const height = fontSize / PIXELS_PER_UNIT;
 
-    return (
-      x >= -metrics.width / 2 &&
-      x <= metrics.width / 2 &&
-      y >= 0 &&
-      y <= fontSize
-    );
+    return Math.abs(point.x) <= width / 2 && Math.abs(point.y) <= height / 2;
   }
 }

@@ -6,6 +6,7 @@ import { RenderLoop } from "./utils/loop";
 import { SelectionManager } from "./utils/selection";
 import { AnimationSystem } from "./animation/animationsystem";
 import { TrackerSystem } from "./tracker/trackerSystem";
+import { Camera } from "./camera";
 
 export class Scene {
   /*
@@ -32,6 +33,9 @@ export class Scene {
 
   readonly trackerSystem: TrackerSystem;
 
+  /** World-unit ↔ pixel conversion for this scene. */
+  readonly camera = new Camera();
+
   // readonly trackers: TrackerSystem;
 
   // readonly events: SceneEvents;
@@ -55,6 +59,7 @@ export class Scene {
     this.ctx = ctx;
     this.width = canvas.width;
     this.height = canvas.height;
+    this.camera.resize(this.width, this.height);
     this.selection = new SelectionManager(this);
     this.mobjectManager = new MobjectManager();
     this.animationSystem = new AnimationSystem(this);
@@ -106,7 +111,8 @@ export class Scene {
 
   /**
    * Resize the canvas to the given CSS dimensions while keeping rendering
-   * crisp on high-DPI displays.
+   * crisp on high-DPI displays. The camera keeps the world origin at the
+   * centre of the new viewport.
    */
   resize(width: number, height: number, pixelRatio = 1): void {
     const nextWidth = Math.max(1, Math.floor(width));
@@ -121,8 +127,7 @@ export class Scene {
     this.canvas.style.width = `${nextWidth}px`;
     this.canvas.style.height = `${nextHeight}px`;
 
-    // Changing the backing-store size resets the context, so re-apply DPR.
-    this.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.camera.resize(nextWidth, nextHeight, ratio);
   }
 
   dispose(): void {
@@ -152,7 +157,9 @@ export class Scene {
   }
 
   render() {
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    // Clear in device space, then draw the whole scene in world units.
+    this.camera.clear(this.ctx);
+    this.camera.applyTransform(this.ctx);
 
     for (const root of this.mobjectManager.tree.roots) {
       this.renderNode(root);

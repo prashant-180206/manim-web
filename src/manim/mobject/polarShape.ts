@@ -29,9 +29,9 @@ export class PolarShape extends Mobject {
 
       samples: Values.number(360),
 
-      strokeColor: Values.string("black"),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(1),
-      color: Values.string("lightblue"),
+      color: Values.color("#add8e6"),
     }) as any;
   }
 
@@ -61,7 +61,7 @@ export class PolarShape extends Mobject {
 
     if (p.strokeWidth.get() > 0) {
       ctx.strokeStyle = p.strokeColor.get();
-      ctx.lineWidth = p.strokeWidth.get();
+      this.applyStrokeWidth(ctx, p.strokeWidth.get());
       ctx.stroke();
     }
 

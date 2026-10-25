@@ -6,6 +6,7 @@ import { PropertyController } from "./helpers/propertycontroller";
 import { BaseProperty } from "./helpers/proprertytypes";
 import { Value, Values } from "../utils/value";
 import { Mobject } from "./mobect";
+import { PIXELS_PER_UNIT } from "../utils/units";
 
 interface LatexTextProperty extends BaseProperty {
   latex: Value<string>;
@@ -39,7 +40,7 @@ export class LatexText extends Mobject {
 
       fontSize: Values.number(32),
 
-      color: Values.string("#000000"),
+      color: Values.color("#000000"),
 
       displayMode: Values.boolean(true),
     }) as any;
@@ -112,7 +113,15 @@ export class LatexText extends Mobject {
 
     this.beginRender(ctx);
 
-    ctx.drawImage(this.image, 0, 0);
+    // The rendered SVG is measured in pixels, so convert it to world units and
+    // flip it upright inside the camera's y-up space.
+    const width = this.image.width / PIXELS_PER_UNIT;
+    const height = this.image.height / PIXELS_PER_UNIT;
+
+    ctx.save();
+    ctx.scale(1, -1);
+    ctx.drawImage(this.image, -width / 2, -height / 2, width, height);
+    ctx.restore();
 
     this.endRender(ctx);
   }
@@ -120,6 +129,12 @@ export class LatexText extends Mobject {
   override contains(x: number, y: number): boolean {
     if (!this.image) return false;
 
-    return x >= 0 && y >= 0 && x <= this.image.width && y <= this.image.height;
+    const point = this.worldToLocal(x, y);
+    const width = this.image.width / PIXELS_PER_UNIT;
+    const height = this.image.height / PIXELS_PER_UNIT;
+
+    return (
+      Math.abs(point.x) <= width / 2 && Math.abs(point.y) <= height / 2
+    );
   }
 }

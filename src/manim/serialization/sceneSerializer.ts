@@ -23,7 +23,10 @@ import type { Range, Vector } from "../utils/types";
 import { TrackerConnectionName } from "../tracker/trackerconnectorNames";
 
 export const SCENE_FILE_FORMAT = "manim-web-scene";
-export const SCENE_FILE_VERSION = 1;
+export const SCENE_FILE_VERSION = 2;
+
+/** Older files stored coordinates in pixels instead of world units. */
+const LEGACY_PIXELS_PER_UNIT = 50;
 
 export interface SerializedValue {
   type: ValueType;
@@ -390,9 +393,16 @@ export function parseSceneDocument(input: unknown): SceneDocument {
   if (data.format !== SCENE_FILE_FORMAT) {
     fail(`expected a '${SCENE_FILE_FORMAT}' document.`);
   }
-  if (data.version !== SCENE_FILE_VERSION) {
+  const version = data.version;
+
+  if (
+    typeof version !== "number" ||
+    !Number.isInteger(version) ||
+    version < 1 ||
+    version > SCENE_FILE_VERSION
+  ) {
     fail(
-      `unsupported version '${String(data.version)}' (expected ${SCENE_FILE_VERSION}).`,
+      `unsupported version '${String(data.version)}' (expected 1–${SCENE_FILE_VERSION}).`,
     );
   }
 
@@ -521,7 +531,7 @@ export function parseSceneDocument(input: unknown): SceneDocument {
   const timeline = isRecord(data.timeline) ? data.timeline : {};
   const currentTime = timeline.currentTime;
 
-  return {
+  const document: SceneDocument = {
     format: SCENE_FILE_FORMAT,
     version: SCENE_FILE_VERSION,
     name:
@@ -543,6 +553,121 @@ export function parseSceneDocument(input: unknown): SceneDocument {
           ? Math.max(0, currentTime)
           : 0,
     },
+  };
+
+  return version === 1 ? migrateSceneDocumentV1(document) : document;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Version migration                                                          */
+/* -------------------------------------------------------------------------- */
+
+function legacyPointToWorld(
+  point: Vector,
+  width: number,
+  height: number,
+): Vector {
+  return {
+    x: (point.x - width / 2) / LEGACY_PIXELS_PER_UNIT,
+    y: (height / 2 - point.y) / LEGACY_PIXELS_PER_UNIT,
+  };
+}
+
+function migrateMobjectV1(
+  mobject: SerializedMobject,
+  width: number,
+  height: number,
+): SerializedMobject {
+  const properties: Record<string, SerializedValue> = {};
+
+  for (const [key, property] of Object.entries(mobject.properties)) {
+    let next = property;
+
+    if (
+      key === "position" &&
+      property.type === ValueType.vector &&
+      isVector(property.value)
+    ) {
+      next = {
+        ...property,
+        value: legacyPointToWorld(property.value, width, height),
+      };
+    } else if (
+      (key === "color" || key === "strokeColor") &&
+      property.type === ValueType.string
+    ) {
+      next = { ...property, type: ValueType.color };
+    } else if (
+      key === "vertices" &&
+      property.type === ValueType.vectorArray &&
+      Array.isArray(property.value)
+    ) {
+      next = {
+        ...property,
+        value: property.value.map((point) =>
+          isVector(point)
+            ? {
+                x: point.x / LEGACY_PIXELS_PER_UNIT,
+                y: -point.y / LEGACY_PIXELS_PER_UNIT,
+              }
+            : point,
+        ),
+      };
+    } else if (
+      (key === "radius" || key === "width" || key === "height") &&
+      typeof property.value === "number"
+    ) {
+      next = {
+        ...property,
+        value: property.value / LEGACY_PIXELS_PER_UNIT,
+      };
+    }
+
+    // strokeWidth is a screen style and stays in CSS pixels.
+    properties[key] = next;
+  }
+
+  return {
+    ...mobject,
+    properties,
+    children: mobject.children.map((child) =>
+      migrateMobjectV1(child, width, height),
+    ),
+  };
+}
+
+function migrateSceneDocumentV1(document: SceneDocument): SceneDocument {
+  return {
+    ...document,
+    mobjects: document.mobjects.map((mobject) =>
+      migrateMobjectV1(mobject, document.width, document.height),
+    ),
+    animations: document.animations.map((animation) => ({
+      ...animation,
+      params: Object.fromEntries(
+        Object.entries(animation.params).map(([key, param]) => {
+          if (
+            key === "position" &&
+            param.type === ValueType.vector &&
+            isVector(param.value)
+          ) {
+            return [
+              key,
+              {
+                ...param,
+                value: legacyPointToWorld(
+                  param.value,
+                  document.width,
+                  document.height,
+                ),
+              } satisfies SerializedValue,
+            ];
+          }
+
+          return [key, param];
+        }),
+      ),
+    })),
   };
 }
 

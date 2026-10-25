@@ -13,9 +13,7 @@ export default function Home() {
     if (canvasRef.current) {
       scene = new Scene(canvasRef.current);
       scene.start();
-      const canvas = canvasRef.current;
-      canvas.width = 500;
-      canvas.height = 400;
+      scene.resize(500, 400, window.devicePixelRatio || 1);
     }
   }, [canvasRef]);
 

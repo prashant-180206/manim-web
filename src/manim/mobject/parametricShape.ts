@@ -28,9 +28,9 @@ export class ParametricShape extends Mobject {
       xRange: Values.range({ min: -1, max: 1 }),
       yRange: Values.range({ min: -1, max: 1 }),
       samples: Values.number(200),
-      strokeColor: Values.string("black"),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(1),
-      color: Values.string("lightblue"),
+      color: Values.color("#add8e6"),
     }) as any;
   }
 
@@ -59,7 +59,7 @@ export class ParametricShape extends Mobject {
 
     if (p.strokeWidth.get() > 0) {
       ctx.strokeStyle = p.strokeColor.get();
-      ctx.lineWidth = p.strokeWidth.get();
+      this.applyStrokeWidth(ctx, p.strokeWidth.get());
       ctx.stroke();
     }
 

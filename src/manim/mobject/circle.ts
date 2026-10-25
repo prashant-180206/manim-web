@@ -12,10 +12,10 @@ export class Circle extends Mobject {
     super(id, name);
     this.propertyController = new PropertyController<CircleProperty>({
       ...this.propertyController.properties,
-      radius: Values.number(50),
-      strokeColor: Values.string("black"),
+      radius: Values.number(1),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(1),
-      color: Values.string("red"),
+      color: Values.color("#ff0000"),
     }) as any;
   }
 
@@ -32,7 +32,7 @@ export class Circle extends Mobject {
 
     if (p.strokeWidth.get() > 0) {
       ctx.strokeStyle = p.strokeColor.get();
-      ctx.lineWidth = p.strokeWidth.get();
+      this.applyStrokeWidth(ctx, p.strokeWidth.get());
       ctx.stroke();
     }
 
@@ -40,8 +40,11 @@ export class Circle extends Mobject {
   }
 
   contains(x: number, y: number): boolean {
-    const dx = x - 100;
-    const dy = y - 100;
-    return dx * dx + dy * dy <= 50 * 50;
+    const point = this.worldToLocal(x, y);
+    const radius = (
+      this.propertyController.properties as CircleProperty
+    ).radius.get();
+
+    return point.x * point.x + point.y * point.y <= radius * radius;
   }
 }

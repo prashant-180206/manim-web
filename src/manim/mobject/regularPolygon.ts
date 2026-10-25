@@ -15,12 +15,12 @@ export class RegularPolygon extends Mobject {
     super(id, name);
     this.propertyController = new PropertyController<RegularPolygonProperty>({
       ...this.propertyController.properties,
-      width: Values.number(120),
-      height: Values.number(120),
+      width: Values.number(2.4),
+      height: Values.number(2.4),
       sides: Values.number(5),
-      strokeColor: Values.string("black"),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(1),
-      color: Values.string("royalblue"),
+      color: Values.color("#4169e1"),
     }) as any;
   }
 
@@ -44,7 +44,7 @@ export class RegularPolygon extends Mobject {
 
     if (p.strokeWidth.get() > 0) {
       ctx.strokeStyle = p.strokeColor.get();
-      ctx.lineWidth = p.strokeWidth.get();
+      this.applyStrokeWidth(ctx, p.strokeWidth.get());
       ctx.stroke();
     }
 
@@ -52,6 +52,7 @@ export class RegularPolygon extends Mobject {
   }
 
   contains(x: number, y: number): boolean {
+    const point = this.worldToLocal(x, y);
     const points = this.getVertices(
       this.propertyController.properties as RegularPolygonProperty,
     );
@@ -64,7 +65,8 @@ export class RegularPolygon extends Mobject {
       const yj = points[j].y;
 
       const intersects =
-        yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+        yi > point.y !== yj > point.y &&
+        point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
 
       if (intersects) {
         inside = !inside;

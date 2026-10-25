@@ -17,14 +17,14 @@ export class Polygon extends Mobject {
         vertices.length > 0
           ? vertices
           : [
-              { x: -50, y: -50 },
-              { x: 50, y: -20 },
-              { x: 20, y: 50 },
+              { x: -1, y: -1 },
+              { x: 1, y: -0.4 },
+              { x: 0.4, y: 1 },
             ],
       ),
-      strokeColor: Values.string("black"),
+      strokeColor: Values.color("#000000"),
       strokeWidth: Values.number(1),
-      color: Values.string("mediumseagreen"),
+      color: Values.color("#3cb371"),
     }) as any;
   }
 
@@ -53,7 +53,7 @@ export class Polygon extends Mobject {
 
     if (p.strokeWidth.get() > 0) {
       ctx.strokeStyle = p.strokeColor.get();
-      ctx.lineWidth = p.strokeWidth.get();
+      this.applyStrokeWidth(ctx, p.strokeWidth.get());
       ctx.stroke();
     }
 
@@ -61,6 +61,7 @@ export class Polygon extends Mobject {
   }
 
   contains(x: number, y: number): boolean {
+    const point = this.worldToLocal(x, y);
     const points = (
       this.propertyController.properties as PolygonProperty
     ).vertices.get();
@@ -73,7 +74,8 @@ export class Polygon extends Mobject {
       const yj = points[j].y;
 
       const intersects =
-        yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+        yi > point.y !== yj > point.y &&
+        point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
 
       if (intersects) {
         inside = !inside;

@@ -13,6 +13,7 @@ import {
   FileCode,
   FileX,
   FolderOpen,
+  ListTree,
   MonitorPlay,
   PanelBottomClose,
   PanelBottomOpen,
@@ -73,8 +74,14 @@ import {
   serializeScene,
 } from "@/manim/serialization/sceneSerializer";
 import { KeyHint } from "./editorPrimitives";
+import { LayersPanel } from "./LayersPanel";
 
-type EditorView = "scene" | "inspector" | "animations" | "trackers";
+type EditorView =
+  | "scene"
+  | "layers"
+  | "inspector"
+  | "animations"
+  | "trackers";
 type BottomTab = "timeline" | "console";
 
 interface ViewDefinition {
@@ -86,6 +93,7 @@ interface ViewDefinition {
 
 const views: ViewDefinition[] = [
   { id: "scene", label: "Scene", icon: Boxes, shortcut: "1" },
+  { id: "layers", label: "Layers", icon: ListTree, shortcut: "5" },
   {
     id: "inspector",
     label: "Inspector",
@@ -112,7 +120,7 @@ const shortcuts: { keys: string[]; label: string }[] = [
   { keys: ["←", "→"], label: "Seek by 0.1s (hold Shift for 1s)" },
   { keys: ["Ctrl", "B"], label: "Toggle the sidebar" },
   { keys: ["Ctrl", "J"], label: "Toggle the bottom panel" },
-  { keys: ["1", "–", "4"], label: "Switch sidebar views" },
+  { keys: ["1", "–", "5"], label: "Switch sidebar views" },
 ];
 
 interface FileMenuItemProps {
@@ -586,6 +594,8 @@ export function EditorShell({ scene }: EditorShellProps) {
     switch (activeView) {
       case "scene":
         return <SceneTreePanel />;
+      case "layers":
+        return <LayersPanel />;
       case "inspector":
         return <InspectorPanel />;
       case "animations":

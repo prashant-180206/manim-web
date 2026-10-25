@@ -16,6 +16,7 @@ import { IconType } from "react-icons";
 import { MobjectNode } from "../mobject/helpers/MobjectTree";
 import { Vector } from "../utils/types";
 import { Mobject } from "../mobject/mobect";
+import { Group } from "../mobject/group";
 
 export interface MobjectCreationUIData {
   name: MobjectName;
@@ -83,54 +84,57 @@ export class MobjectUI {
   static getMobjectTreeUIData(scene: Scene): MobjectTreeControlData[] {
     const tree = scene.mobjectManager.tree;
     const notifyTreeChanged = () => scene.mobjectManager.onTreeChanged.emit();
+    let drawOrder = 0;
 
-    const createTreeData = (node: MobjectNode): MobjectTreeControlData => ({
-      id: node.id,
-      name: node.mobject.name,
-      zIndex: 0,
-      icon: MobjectIcons[node.mobject.name as MobjectName] ?? FaCircle,
-      visible: node.visible,
-      locked: node.locked,
-      isGroup: node.mobject.name === MobjectName.Group,
-      hasChildren: node.children.length > 0,
-      children: node.children.map(createTreeData),
-      delete: () => scene.mobjectManager.delete(node.mobject),
-      select: () => scene.selection.selectMobject(node.mobject),
-      multiselect: () => scene.selection.multiselectMobject(node.mobject),
-      rename: (name: string) => {
-        scene.mobjectManager.renameMobject(node.id, name);
-        notifyTreeChanged();
-      },
-      toggleVisibility: () => {
-        node.visible = !node.visible;
-        notifyTreeChanged();
-      },
-      toggleLocked: () => {
-        node.locked = !node.locked;
-        notifyTreeChanged();
-      },
-      bringToFront: () => {
-        tree.bringToFront(node);
-        notifyTreeChanged();
-      },
-      sendToBack: () => {
-        tree.sendToBack(node);
-        notifyTreeChanged();
-      },
-      bringForward: () => {
-        tree.bringForward(node);
-        notifyTreeChanged();
-      },
-      sendBackward: () => {
-        tree.sendBackward(node);
-        notifyTreeChanged();
-      },
-      addtoGroup: (groupId: string) =>
-        scene.mobjectManager.addToGroup(groupId, node.mobject),
-      removefromGroup: (groupId: string) =>
-        scene.mobjectManager.removeFromGroup(groupId, node.mobject),
-    });
+    const createTreeData = (node: MobjectNode): MobjectTreeControlData => {
+      // Draw order is a pre-order traversal of the tree: a node paints first,
+      // then its children. Higher numbers render in front.
+      const zIndex = drawOrder++;
 
-    return scene.mobjectManager.tree.roots.map(createTreeData);
+      return {
+        id: node.id,
+        name: node.mobject.name,
+        zIndex,
+        icon: MobjectIcons[node.mobject.kind] ?? FaCircle,
+        visible: node.visible,
+        locked: node.locked,
+        isGroup: node.mobject instanceof Group,
+        hasChildren: node.children.length > 0,
+        children: node.children.map(createTreeData),
+        delete: () => scene.mobjectManager.delete(node.mobject),
+        select: () => scene.selection.selectMobject(node.mobject),
+        multiselect: () => scene.selection.multiselectMobject(node.mobject),
+        rename: (name: string) => {
+          scene.mobjectManager.renameMobject(node.id, name);
+          notifyTreeChanged();
+        },
+        toggleVisibility: () => {
+          node.visible = !node.visible;
+          notifyTreeChanged();
+        },
+        toggleLocked: () => {
+          node.locked = !node.locked;
+          notifyTreeChanged();
+        },
+        bringToFront: () => {
+          scene.mobjectManager.bringToFront(node.mobject);
+        },
+        sendToBack: () => {
+          scene.mobjectManager.sendToBack(node.mobject);
+        },
+        bringForward: () => {
+          scene.mobjectManager.bringForward(node.mobject);
+        },
+        sendBackward: () => {
+          scene.mobjectManager.sendBackward(node.mobject);
+        },
+        addtoGroup: (groupId: string) =>
+          scene.mobjectManager.addToGroup(groupId, node.mobject),
+        removefromGroup: (groupId: string) =>
+          scene.mobjectManager.removeFromGroup(groupId, node.mobject),
+      };
+    };
+
+    return tree.roots.map(createTreeData);
   }
 }

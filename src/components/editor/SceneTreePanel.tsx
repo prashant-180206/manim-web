@@ -401,7 +401,7 @@ export function SceneTreePanel() {
 
   const createMobject = (create: (position?: { x: number; y: number }) => void) => {
     try {
-      create({ x: scene.width / 2, y: scene.height / 2 });
+      create({ x: 0, y: 0 });
     } catch (error) {
       log("error", formatErrorMessage(error));
     }

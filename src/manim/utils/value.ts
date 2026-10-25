@@ -38,6 +38,10 @@ export class Values {
     return new Value<string>(value, ValueType.string);
   }
 
+  static color(value: string) {
+    return new Value<string>(value, ValueType.color);
+  }
+
   static boolean(value: boolean) {
     return new Value<boolean>(value, ValueType.boolean);
   }

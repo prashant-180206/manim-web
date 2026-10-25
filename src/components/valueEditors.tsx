@@ -172,6 +172,74 @@ function StringValueEditor({ value, onChange }: ValueEditorProps<string>) {
   );
 }
 
+/** Convert any CSS color into the six-digit hex format color inputs expect. */
+function toHexColor(color: string): string {
+  const trimmed = color.trim();
+
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return `#${trimmed
+      .slice(1)
+      .split("")
+      .map((digit) => `${digit}${digit}`)
+      .join("")
+      .toLowerCase()}`;
+  }
+
+  const ctx = document.createElement("canvas").getContext("2d");
+
+  if (!ctx) return "#000000";
+
+  ctx.fillStyle = "#000000";
+  ctx.fillStyle = trimmed;
+
+  const normalized = String(ctx.fillStyle);
+
+  if (/^#[0-9a-f]{6}$/i.test(normalized)) {
+    return normalized.toLowerCase();
+  }
+
+  const channels = normalized.match(/rgba?\(([^)]+)\)/i)?.[1].split(",");
+
+  if (!channels || channels.length < 3) return "#000000";
+
+  const [red, green, blue, alpha] = channels.map((channel) =>
+    Number(channel.trim()),
+  );
+
+  if (alpha === 0) return "#000000";
+
+  return `#${[red, green, blue]
+    .map((channel) =>
+      Math.max(0, Math.min(255, channel)).toString(16).padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function ColorValueEditor({ value, onChange }: ValueEditorProps<string>) {
+  const current = value.get();
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="color"
+        value={toHexColor(current)}
+        onChange={(event) => {
+          value.set(event.target.value);
+          onChange?.();
+        }}
+        className="h-8 w-12 shrink-0 cursor-pointer p-1"
+      />
+      <span className="truncate font-mono text-[11px] text-muted-foreground">
+        {current}
+      </span>
+    </div>
+  );
+}
+
 function BooleanValueEditor({ value, onChange }: ValueEditorProps<boolean>) {
   return (
     <Label className="flex items-center gap-3 text-stone-100">
@@ -346,6 +414,10 @@ export function ValueEditor<T>({ value, onChange }: ValueEditorProps<T>) {
     case ValueType.string:
       return (
         <StringValueEditor value={value as Value<string>} onChange={onChange} />
+      );
+    case ValueType.color:
+      return (
+        <ColorValueEditor value={value as Value<string>} onChange={onChange} />
       );
     case ValueType.boolean:
       return (

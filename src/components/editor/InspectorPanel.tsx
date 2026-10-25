@@ -4,6 +4,7 @@ import { Crosshair, MousePointer2, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Group } from "@/manim/mobject/group";
 import type { Value } from "@/manim/utils/value";
+import { PIXELS_PER_UNIT } from "@/manim/utils/units";
 import { ValueEditor } from "@/components/valueEditors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,18 +27,40 @@ function formatLabel(key: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
+/** Screen styles stay in CSS pixels; design geometry uses world units. */
+function unitHint(key: string): string | null {
+  if (key === "strokeWidth" || key === "fontSize") return "px";
+  if (
+    key === "position" ||
+    key === "radius" ||
+    key === "width" ||
+    key === "height" ||
+    key === "vertices"
+  ) {
+    return "units";
+  }
+
+  return null;
+}
+
 interface PropertyFieldProps {
   label: string;
+  hint?: string | null;
   value: Value<unknown>;
   onChange: () => void;
 }
 
-function PropertyField({ label, value, onChange }: PropertyFieldProps) {
+function PropertyField({ label, hint, value, onChange }: PropertyFieldProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-medium text-foreground/80">
           {label}
+          {hint && (
+            <span className="ml-1 font-normal text-muted-foreground">
+              ({hint})
+            </span>
+          )}
         </span>
         <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
           {value.type()}
@@ -177,8 +200,8 @@ export function InspectorPanel() {
               className="w-full"
               onClick={() => {
                 mobject.properties.position.set({
-                  x: scene.width / 2,
-                  y: scene.height / 2,
+                  x: 0,
+                  y: 0,
                 });
                 refresh();
               }}
@@ -194,10 +217,15 @@ export function InspectorPanel() {
           defaultOpen
         >
           <div className="space-y-4">
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              World units · origin at the viewport centre · 1 unit ={" "}
+              {PIXELS_PER_UNIT} px
+            </p>
             {transform.map(([key, value]) => (
               <PropertyField
                 key={key}
                 label={formatLabel(key)}
+                hint={unitHint(key)}
                 value={value}
                 onChange={refresh}
               />
@@ -212,6 +240,7 @@ export function InspectorPanel() {
                 <PropertyField
                   key={key}
                   label={formatLabel(key)}
+                  hint={unitHint(key)}
                   value={value}
                   onChange={refresh}
                 />
@@ -230,6 +259,7 @@ export function InspectorPanel() {
               <PropertyField
                 key={key}
                 label={formatLabel(key)}
+                hint={unitHint(key)}
                 value={value}
                 onChange={refresh}
               />

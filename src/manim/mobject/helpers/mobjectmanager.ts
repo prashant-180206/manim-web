@@ -188,6 +188,202 @@ export class MobjectManager {
     return node;
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | Z-order / hierarchy
+  |--------------------------------------------------------------------------
+  |
+  | Draw order is the tree order: later siblings render in front of earlier
+  | ones, and a group's children render directly after the group. These
+  | helpers keep Group.children in sync with the tree after any move.
+  |
+  */
+
+  private listFor(parent: MobjectNode | null): MobjectNode[] {
+    return parent ? parent.children : this.tree.roots;
+  }
+
+  private syncGroupChildren(parent: MobjectNode | null): void {
+    if (!parent || !(parent.mobject instanceof Group)) return;
+
+    parent.mobject.children.splice(
+      0,
+      parent.mobject.children.length,
+      ...parent.children.map((child) => child.mobject),
+    );
+  }
+
+  /** True when `ancestor` is `node` or one of its ancestors. */
+  private containsNode(ancestor: MobjectNode, node: MobjectNode): boolean {
+    let current: MobjectNode | null = node;
+
+    while (current) {
+      if (current === ancestor) return true;
+      current = current.parent;
+    }
+
+    return false;
+  }
+
+  /** Move a node directly behind/front of a target sibling. */
+  private moveRelative(
+    mobjectId: string,
+    targetId: string,
+    inFront: boolean,
+  ): void {
+    const node = this.getNode(mobjectId);
+    const target = this.getNode(targetId);
+
+    if (node === target) return;
+
+    // A node cannot be placed inside its own subtree.
+    if (this.containsNode(node, target)) {
+      throw new Error(`Cannot move '${node.id}' relative to its own child.`);
+    }
+
+    const oldParent = node.parent;
+    const parent = target.parent;
+
+    this.detach(node);
+
+    const list = this.listFor(parent);
+    const index = list.indexOf(target);
+
+    if (index === -1) {
+      list.push(node);
+    } else {
+      list.splice(inFront ? index + 1 : index, 0, node);
+    }
+
+    node.parent = parent;
+
+    this.syncGroupChildren(oldParent);
+    this.syncGroupChildren(parent);
+    this.onTreeChanged.emit();
+  }
+
+  /** Place a mobject in front of another sibling (higher z-index). */
+  moveInFrontOf(mobjectId: string, targetId: string): void {
+    this.moveRelative(mobjectId, targetId, true);
+  }
+
+  /** Place a mobject behind another sibling (lower z-index). */
+  moveBehind(mobjectId: string, targetId: string): void {
+    this.moveRelative(mobjectId, targetId, false);
+  }
+
+  /**
+   * Move a mobject into a group. Without an index the object is appended,
+   * which makes it the front-most child of that group.
+   */
+  moveIntoGroup(groupId: string, mobjectId: string, index?: number): void {
+    const groupNode = this.getNode(groupId);
+    const node = this.getNode(mobjectId);
+
+    if (!(groupNode.mobject instanceof Group)) {
+      throw new Error(`Mobject '${groupId}' is not a Group.`);
+    }
+
+    if (this.containsNode(node, groupNode)) {
+      throw new Error("A group cannot be moved into itself.");
+    }
+
+    const oldParent = node.parent;
+
+    this.detach(node);
+
+    const target = Math.max(
+      0,
+      Math.min(index ?? groupNode.children.length, groupNode.children.length),
+    );
+
+    groupNode.children.splice(target, 0, node);
+    node.parent = groupNode;
+
+    this.syncGroupChildren(oldParent);
+    this.syncGroupChildren(groupNode);
+    this.onTreeChanged.emit();
+  }
+
+  /** Move a mobject back to the root layer. Appends (front-most) by default. */
+  moveToRoot(mobjectId: string, index?: number): void {
+    const node = this.getNode(mobjectId);
+    const oldParent = node.parent;
+
+    this.detach(node);
+
+    const target = Math.max(
+      0,
+      Math.min(index ?? this.tree.roots.length, this.tree.roots.length),
+    );
+
+    this.tree.roots.splice(target, 0, node);
+    node.parent = null;
+
+    this.syncGroupChildren(oldParent);
+    this.onTreeChanged.emit();
+  }
+
+  bringToFront(object: Mobject): void {
+    const node = this.getNode(object.id);
+    const parent = node.parent;
+    const list = this.listFor(parent);
+    const index = list.indexOf(node);
+
+    if (index === -1 || index === list.length - 1) return;
+
+    list.splice(index, 1);
+    list.push(node);
+
+    this.syncGroupChildren(parent);
+    this.onTreeChanged.emit();
+  }
+
+  sendToBack(object: Mobject): void {
+    const node = this.getNode(object.id);
+    const parent = node.parent;
+    const list = this.listFor(parent);
+    const index = list.indexOf(node);
+
+    if (index <= 0) return;
+
+    list.splice(index, 1);
+    list.unshift(node);
+
+    this.syncGroupChildren(parent);
+    this.onTreeChanged.emit();
+  }
+
+  bringForward(object: Mobject): void {
+    const node = this.getNode(object.id);
+    const parent = node.parent;
+    const list = this.listFor(parent);
+    const index = list.indexOf(node);
+
+    if (index === -1 || index === list.length - 1) return;
+
+    list.splice(index, 1);
+    list.splice(index + 1, 0, node);
+
+    this.syncGroupChildren(parent);
+    this.onTreeChanged.emit();
+  }
+
+  sendBackward(object: Mobject): void {
+    const node = this.getNode(object.id);
+    const parent = node.parent;
+    const list = this.listFor(parent);
+    const index = list.indexOf(node);
+
+    if (index <= 0) return;
+
+    list.splice(index, 1);
+    list.splice(index - 1, 0, node);
+
+    this.syncGroupChildren(parent);
+    this.onTreeChanged.emit();
+  }
+
   /** Generate a fresh id that cannot collide with a restored scene. */
   private nextId(name: MobjectName): string {
     let id = this.idGenerator.generateId(name);
