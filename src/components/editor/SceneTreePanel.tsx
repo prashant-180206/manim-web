@@ -108,9 +108,9 @@ function TreeRow({ data, depth, selectedIds, groups }: TreeRowProps) {
   };
 
   const handleSelect = (event: MouseEvent) => {
-    if (event.metaKey || event.ctrlKey) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) {
       data.multiselect();
-      refresh();
+      refresh({ record: false });
       return;
     }
 

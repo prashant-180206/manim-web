@@ -52,6 +52,14 @@ export function TimelinePanel() {
     return () => cancelAnimationFrame(frame);
   }, [system]);
 
+  // Playback/scrubbing moves the playhead and re-derives animated property
+  // values, but it is not an authored edit, so keep it out of undo history.
+  // Rebasing when playback stops keeps the history baseline in sync with the
+  // state the user sees before their next edit.
+  useEffect(() => {
+    refresh({ record: false });
+  }, [playing, refresh]);
+
   const timeline = AnimationUI.getTimelineData(scene);
   const { animations, totalDuration } = timeline;
   const hasAnimations = animations.length > 0;
@@ -102,6 +110,7 @@ export function TimelinePanel() {
 
     system.setCurrentTime(ratio * totalDuration);
     setTime(system.currentTime);
+    refresh({ record: false });
   };
 
   const progress = totalDuration > 0 ? Math.min(time / totalDuration, 1) : 0;
@@ -115,7 +124,7 @@ export function TimelinePanel() {
           className="text-muted-foreground"
           onClick={() => {
             timeline.stop();
-            refresh();
+            refresh({ record: false });
           }}
           disabled={!hasAnimations}
         >
@@ -134,7 +143,7 @@ export function TimelinePanel() {
               }
               timeline.play();
             }
-            refresh();
+            refresh({ record: false });
           }}
           disabled={!hasAnimations}
         >
@@ -150,7 +159,7 @@ export function TimelinePanel() {
                 className="text-muted-foreground"
                 onClick={() => {
                   timeline.play(true);
-                  refresh();
+                  refresh({ record: false });
                 }}
                 disabled={!hasAnimations}
               />
@@ -170,7 +179,7 @@ export function TimelinePanel() {
                 className="text-muted-foreground"
                 onClick={() => {
                   timeline.stop();
-                  refresh();
+                  refresh({ record: false });
                 }}
                 disabled={!hasAnimations}
               />
@@ -197,6 +206,7 @@ export function TimelinePanel() {
           onChange={(event) => {
             system.setCurrentTime(Number(event.target.value));
             setTime(system.currentTime);
+            refresh({ record: false });
           }}
           disabled={!hasAnimations}
           className="h-1.5 min-w-24 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"

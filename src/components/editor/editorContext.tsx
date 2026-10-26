@@ -10,10 +10,19 @@ export interface ConsoleEntry {
   time: Date;
 }
 
+export interface RefreshOptions {
+  /**
+   * Whether this refresh follows an authored edit. Pass `false` for timeline
+   * scrubbing/playback, which changes animated values but should not create an
+   * undo step.
+   */
+  record?: boolean;
+}
+
 export interface EditorContextValue {
   scene: Scene;
   /** Force the editor to read fresh engine state. */
-  refresh: () => void;
+  refresh: (options?: RefreshOptions) => void;
   log: (level: ConsoleLevel, message: string) => void;
 }
 

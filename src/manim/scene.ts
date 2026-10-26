@@ -7,6 +7,7 @@ import { SelectionManager } from "./utils/selection";
 import { AnimationSystem } from "./animation/animationsystem";
 import { TrackerSystem } from "./tracker/trackerSystem";
 import { Camera } from "./camera";
+import type { Vector } from "./utils/types";
 
 export class Scene {
   /*
@@ -91,9 +92,45 @@ export class Scene {
     this.initializeRenderer();
   }
 
-  private initializeInput(): void {}
+  private initializeInput(): void {
+    this.canvas.addEventListener("pointerdown", this.onPointerDown);
+  }
 
   private initializeRenderer(): void {}
+
+  /**
+   * Convert a browser pointer event into world coordinates. The canvas may be
+   * laid out at a different CSS size than its logical camera size, so the
+   * position is normalised against the element's bounding box first.
+   */
+  private pointerToWorld(event: PointerEvent): Vector | null {
+    const rect = this.canvas.getBoundingClientRect();
+
+    if (rect.width <= 0 || rect.height <= 0) return null;
+
+    const screen = {
+      x: ((event.clientX - rect.left) / rect.width) * this.camera.width,
+      y: ((event.clientY - rect.top) / rect.height) * this.camera.height,
+    };
+
+    return this.camera.screenToWorld(screen);
+  }
+
+  private onPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+
+    const point = this.pointerToWorld(event);
+
+    if (!point) return;
+
+    // Shift/Ctrl/Cmd-click extends the current selection instead of
+    // replacing it, matching the Scene and Layers panels.
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      this.selection.multiselect(point);
+    } else {
+      this.selection.select(point);
+    }
+  };
 
   /*
     |--------------------------------------------------------------------------
@@ -132,6 +169,7 @@ export class Scene {
 
   dispose(): void {
     this.stop();
+    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.mobjectManager.onAdd.clear();
     this.mobjectManager.onRemove.clear();
     this.mobjectManager.onTreeChanged.clear();

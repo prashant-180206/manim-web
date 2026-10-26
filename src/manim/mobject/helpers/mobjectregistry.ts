@@ -4,6 +4,8 @@ import { MobjectName } from "../helpers/mobjectName";
 import { LatexText } from "../latexText";
 import { RegularPolygon } from "../regularPolygon";
 import { Polygon } from "../polygon";
+import { Plane } from "../plane";
+import { PolarPlane } from "../polarPlane";
 import { TextMobject } from "../text";
 import { ParametricPath } from "../parametricPath";
 import { ParametricShape } from "../parametricShape";
@@ -21,6 +23,10 @@ export class MobjectRegistry {
         return new PolarShape(id, MobjectName.PolarShape.toString());
       case MobjectName.Polygon:
         return new Polygon(id, MobjectName.Polygon.toString());
+      case MobjectName.Plane:
+        return new Plane(id, MobjectName.Plane.toString());
+      case MobjectName.PolarPlane:
+        return new PolarPlane(id, MobjectName.PolarPlane.toString());
       case MobjectName.Text:
         return new TextMobject(id, MobjectName.Text.toString());
       case MobjectName.ParametricPath:

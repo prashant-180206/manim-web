@@ -19,10 +19,12 @@ import {
   PanelBottomOpen,
   PanelLeftClose,
   PanelLeftOpen,
+  Redo2,
   Save,
   Settings,
   SlidersHorizontal,
   Terminal,
+  Undo2,
   Workflow,
   X,
   type LucideIcon,
@@ -68,6 +70,7 @@ import {
   readSceneFile,
   sceneNameFromFile,
 } from "./sceneFiles";
+import { SceneHistory } from "./sceneHistory";
 import {
   applyScene,
   clearScene,
@@ -112,7 +115,13 @@ const views: ViewDefinition[] = [
 const shortcuts: { keys: string[]; label: string }[] = [
   { keys: ["Ctrl", "S"], label: "Save the scene as JSON" },
   { keys: ["Ctrl", "O"], label: "Open a scene from JSON" },
+  { keys: ["Ctrl", "Z"], label: "Undo the last change" },
+  { keys: ["Ctrl", "Shift", "Z"], label: "Redo the last undone change" },
   { keys: ["Space"], label: "Play or pause the timeline" },
+  {
+    keys: ["Shift", "Click"],
+    label: "Add or remove a mobject from the selection",
+  },
   { keys: ["Del"], label: "Delete the current selection" },
   { keys: ["Ctrl", "G"], label: "Group multi-selected mobjects" },
   { keys: ["Ctrl", "Shift", "G"], label: "Ungroup the selected group" },
@@ -157,6 +166,7 @@ function CanvasPane() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: scene.width, height: scene.height });
   const selectedMobject = scene.selection.selectedMobject;
+  const extraSelectionCount = scene.selection.editingSelection.size;
   const hasMobjects = scene.mobjectManager.tree.nodes.size > 0;
 
   useEffect(() => {
@@ -193,7 +203,11 @@ function CanvasPane() {
             variant="secondary"
             className="pointer-events-auto max-w-56 bg-background/80 backdrop-blur"
           >
-            <Boxes /> <span className="truncate">{selectedMobject.name}</span>
+            <Boxes />{" "}
+            <span className="truncate">
+              {selectedMobject.name}
+              {extraSelectionCount > 0 ? ` +${extraSelectionCount}` : ""}
+            </span>
           </Badge>
         ) : (
           <span />
@@ -283,14 +297,24 @@ export function EditorShell({ scene }: EditorShellProps) {
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [logs, setLogs] = useState<ConsoleEntry[]>([]);
   const [, setVersion] = useState(0);
+  const [history] = useState(() => new SceneHistory(scene));
 
   const logId = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const suppressEngineLogs = useRef(false);
 
-  const refresh = useCallback(() => {
-    setVersion((version) => version + 1);
-  }, []);
+  const refresh = useCallback(
+    (options?: { record?: boolean }) => {
+      if (options?.record === false) {
+        history.rebase();
+      } else {
+        history.markChanged();
+      }
+
+      setVersion((version) => version + 1);
+    },
+    [history],
+  );
 
   const log = useCallback((level: ConsoleLevel, message: string) => {
     logId.current += 1;
@@ -308,6 +332,44 @@ export function EditorShell({ scene }: EditorShellProps) {
       return next.length > 250 ? next.slice(next.length - 250) : next;
     });
   }, []);
+
+  const runHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      suppressEngineLogs.current = true;
+
+      let changed = false;
+      let failed = false;
+
+      try {
+        changed =
+          direction === "undo" ? history.undo() : history.redo();
+      } catch (error) {
+        failed = true;
+        log(
+          "error",
+          `Could not ${direction}: ${formatErrorMessage(error)}`,
+        );
+      } finally {
+        suppressEngineLogs.current = false;
+      }
+
+      if (failed) return;
+
+      if (!changed) {
+        log("info", `Nothing to ${direction}`);
+        return;
+      }
+
+      refresh({ record: false });
+      log(
+        "success",
+        direction === "undo"
+          ? "Undid the last change"
+          : "Redid the last undone change",
+      );
+    },
+    [history, refresh, log],
+  );
 
   const saveScene = useCallback(
     (name = sceneName) => {
@@ -347,9 +409,10 @@ export function EditorShell({ scene }: EditorShellProps) {
       } finally {
         suppressEngineLogs.current = false;
         refresh();
+        history.reset();
       }
     },
-    [scene, log, refresh],
+    [scene, log, refresh, history],
   );
 
   const closeCurrentScene = useCallback(() => {
@@ -368,8 +431,9 @@ export function EditorShell({ scene }: EditorShellProps) {
     setFileMenuOpen(false);
     setBottomTab("timeline");
     refresh();
+    history.reset();
     log("info", "Closed the scene");
-  }, [scene, log, refresh]);
+  }, [scene, log, refresh, history]);
 
   useEffect(() => {
     const connections = [
@@ -383,8 +447,12 @@ export function EditorShell({ scene }: EditorShellProps) {
           log("info", `Removed ${mobject.name}`);
         }
       }),
-      scene.mobjectManager.onTreeChanged.connect(refresh),
-      scene.selection.onSelectionChanged.connect(refresh),
+      scene.mobjectManager.onTreeChanged.connect(() => refresh()),
+      // Selection is not part of the scene document, so it must not create an
+      // undo step. `record: false` only refreshes the history baseline.
+      scene.selection.onSelectionChanged.connect(() =>
+        refresh({ record: false }),
+      ),
       scene.animationSystem.onAnimationAdded.connect((animation) => {
         refresh();
         if (!suppressEngineLogs.current) {
@@ -403,16 +471,16 @@ export function EditorShell({ scene }: EditorShellProps) {
           );
         }
       }),
-      scene.animationSystem.onSequenceUpdated.connect(refresh),
+      scene.animationSystem.onSequenceUpdated.connect(() => refresh()),
       scene.trackerSystem.onTrackerAdded.connect((tracker) => {
         refresh();
         if (!suppressEngineLogs.current) {
           log("success", `Created tracker ${tracker.name}`);
         }
       }),
-      scene.trackerSystem.onTrackerRemoved.connect(refresh),
-      scene.trackerSystem.onTrackerChanged.connect(refresh),
-      scene.trackerSystem.onConnectionsChanged.connect(refresh),
+      scene.trackerSystem.onTrackerRemoved.connect(() => refresh()),
+      scene.trackerSystem.onTrackerChanged.connect(() => refresh()),
+      scene.trackerSystem.onConnectionsChanged.connect(() => refresh()),
     ];
 
     return () => connections.forEach((connection) => connection.disconnect());
@@ -434,6 +502,12 @@ export function EditorShell({ scene }: EditorShellProps) {
       if (modifier && key.toLowerCase() === "o") {
         event.preventDefault();
         fileInputRef.current?.click();
+        return;
+      }
+
+      if (modifier && key.toLowerCase() === "z") {
+        event.preventDefault();
+        runHistory(event.shiftKey ? "redo" : "undo");
         return;
       }
 
@@ -473,7 +547,7 @@ export function EditorShell({ scene }: EditorShellProps) {
       if (key === "Escape") {
         scene.selection.editingSelection.clear();
         scene.selection.selectMobject(null);
-        refresh();
+        refresh({ record: false });
         return;
       }
 
@@ -492,21 +566,21 @@ export function EditorShell({ scene }: EditorShellProps) {
       if (event.code === "Space") {
         event.preventDefault();
         togglePlayback(scene);
-        refresh();
+        refresh({ record: false });
         return;
       }
 
       if (key === "ArrowLeft") {
         event.preventDefault();
         seekBy(scene, event.shiftKey ? -1 : -0.1);
-        refresh();
+        refresh({ record: false });
         return;
       }
 
       if (key === "ArrowRight") {
         event.preventDefault();
         seekBy(scene, event.shiftKey ? 1 : 0.1);
-        refresh();
+        refresh({ record: false });
         return;
       }
 
@@ -526,7 +600,7 @@ export function EditorShell({ scene }: EditorShellProps) {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [scene, refresh, log, saveScene]);
+  }, [scene, refresh, log, saveScene, runHistory]);
 
   const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -589,6 +663,7 @@ export function EditorShell({ scene }: EditorShellProps) {
   const trackerCount = [...scene.trackerSystem.getTrackerInfo()].length;
   const animationCount = [...scene.animationSystem.all()].length;
   const selectedMobject = scene.selection.selectedMobject;
+  const selectedCount = getSelectedMobjects(scene).length;
 
   const renderPanel = () => {
     switch (activeView) {
@@ -651,6 +726,25 @@ export function EditorShell({ scene }: EditorShellProps) {
                   onSelect={() => {
                     setFileMenuOpen(false);
                     fileInputRef.current?.click();
+                  }}
+                />
+                <Separator className="my-1" />
+                <FileMenuItem
+                  icon={Undo2}
+                  label="Undo"
+                  hint="Ctrl Z"
+                  onSelect={() => {
+                    setFileMenuOpen(false);
+                    runHistory("undo");
+                  }}
+                />
+                <FileMenuItem
+                  icon={Redo2}
+                  label="Redo"
+                  hint="Ctrl Shift Z"
+                  onSelect={() => {
+                    setFileMenuOpen(false);
+                    runHistory("redo");
                   }}
                 />
                 <Separator className="my-1" />
@@ -981,8 +1075,12 @@ export function EditorShell({ scene }: EditorShellProps) {
             <Separator orientation="vertical" className="h-3" />
             <span className="max-w-52 truncate">
               {selectedMobject
-                ? `Selected: ${selectedMobject.name}`
-                : "No selection"}
+                ? `Selected: ${selectedMobject.name}${
+                    selectedCount > 1 ? ` +${selectedCount - 1}` : ""
+                  }`
+                : selectedCount > 0
+                  ? `${selectedCount} selected`
+                  : "No selection"}
             </span>
 
             <span className="ml-auto flex items-center gap-3">

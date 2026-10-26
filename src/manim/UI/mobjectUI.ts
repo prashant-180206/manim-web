@@ -7,6 +7,8 @@ import {
   FaFileLines,
   FaSuperscript,
   FaLayerGroup,
+  FaTableCells,
+  FaCompass,
 } from "react-icons/fa6";
 
 import { PiWaveSineBold } from "react-icons/pi";
@@ -52,6 +54,8 @@ const MobjectIcons: Record<MobjectName, IconType> = {
   [MobjectName.Circle]: FaCircle,
   [MobjectName.RegularPolygon]: FaDrawPolygon,
   [MobjectName.Polygon]: FaVectorSquare,
+  [MobjectName.Plane]: FaTableCells,
+  [MobjectName.PolarPlane]: FaCompass,
   [MobjectName.Text]: FaFont,
   [MobjectName.ParametricPath]: PiWaveSineBold,
   [MobjectName.ParametricShape]: FaShapes,

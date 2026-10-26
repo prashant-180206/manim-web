@@ -21,10 +21,13 @@ export class ParametricShape extends Mobject {
     super(id, name);
     this.propertyController = new PropertyController<ParametricShapeProperty>({
       ...this.propertyController.properties,
-      xMinExpression: Values.string("cos(t)"),
-      xMaxExpression: Values.string("sin(t)"),
-      yMinExpression: Values.string("sin(t)"),
-      yMaxExpression: Values.string("cos(t)"),
+      // Each boundary is a function of the axis it is parameterised by:
+      // left/right use `y`, top/bottom use `x`. The four defaults describe a
+      // unit circle that stays continuous at every corner.
+      xMinExpression: Values.string("-sqrt(1-y^2)"),
+      xMaxExpression: Values.string("sqrt(1-y^2)"),
+      yMinExpression: Values.string("-sqrt(1-x^2)"),
+      yMaxExpression: Values.string("sqrt(1-x^2)"),
       xRange: Values.range({ min: -1, max: 1 }),
       yRange: Values.range({ min: -1, max: 1 }),
       samples: Values.number(200),
@@ -66,79 +69,161 @@ export class ParametricShape extends Mobject {
     this.endRender(ctx);
   }
 
-  contains(_x: number, _y: number): boolean {
-    return false;
+  contains(x: number, y: number): boolean {
+    const p = this.propertyController.properties as ParametricShapeProperty;
+    const points = this.evaluatePoints(p);
+
+    if (points.length < 3) return false;
+
+    const point = this.worldToLocal(x, y);
+    let inside = false;
+
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const xi = points[i].x;
+      const yi = points[i].y;
+      const xj = points[j].x;
+      const yj = points[j].y;
+
+      const intersects =
+        yi > point.y !== yj > point.y &&
+        point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
+
+      if (intersects) {
+        inside = !inside;
+      }
+    }
+
+    return inside;
+  }
+
+  /**
+   * Evaluate one boundary expression. Invalid expressions and non-finite
+   * results are treated as missing samples instead of throwing, so a typo in
+   * the Inspector cannot stop the render loop.
+   */
+  private evaluate(
+    expression: ReturnType<Parser["parse"]>,
+    scope: Record<string, number>,
+  ): number | null {
+    try {
+      const value = expression.evaluate(scope);
+
+      return Number.isFinite(value) ? value : null;
+    } catch {
+      return null;
+    }
   }
 
   private evaluatePoints(p: ParametricShapeProperty): Vector[] {
-    const xMinExpr = this.parser.parse(p.xMinExpression.get());
-    const xMaxExpr = this.parser.parse(p.xMaxExpression.get());
-    const yMinExpr = this.parser.parse(p.yMinExpression.get());
-    const yMaxExpr = this.parser.parse(p.yMaxExpression.get());
+    let expressions;
 
-    const points: Vector[] = [];
+    try {
+      expressions = {
+        xMin: this.parser.parse(p.xMinExpression.get()),
+        xMax: this.parser.parse(p.xMaxExpression.get()),
+        yMin: this.parser.parse(p.yMinExpression.get()),
+        yMax: this.parser.parse(p.yMaxExpression.get()),
+      };
+    } catch {
+      return [];
+    }
 
     const samples = Math.max(2, Math.round(p.samples.get()));
 
-    const xMin = p.xRange.get().min;
-    const xMax = p.xRange.get().max;
+    const xRange = p.xRange.get();
+    const yRange = p.yRange.get();
 
-    const yMin = p.yRange.get().min;
-    const yMax = p.yRange.get().max;
+    const xMin = Math.min(xRange.min, xRange.max);
+    const xMax = Math.max(xRange.min, xRange.max);
 
-    const xStep = (xMax - xMin) / samples;
-    const yStep = (yMax - yMin) / samples;
+    const yMin = Math.min(yRange.min, yRange.max);
+    const yMax = Math.max(yRange.min, yRange.max);
+
+    // The four boundaries meet at four corner points. Sampling each boundary
+    // across the full range would insert artificial diagonals whenever the
+    // range end and the neighbouring expression disagree (for example the top
+    // of a circle is at x = 0, not at x = xRange.min).
+    const bottomLeftX = this.evaluate(expressions.xMin, { y: yMin });
+    const topLeftX = this.evaluate(expressions.xMin, { y: yMax });
+    const topRightX = this.evaluate(expressions.xMax, { y: yMax });
+    const bottomRightX = this.evaluate(expressions.xMax, { y: yMin });
+
+    if (
+      bottomLeftX === null ||
+      topLeftX === null ||
+      topRightX === null ||
+      bottomRightX === null
+    ) {
+      return [];
+    }
+
+    // Clamp the horizontal span of the top/bottom curves to their declared
+    // range. Usually the corners already sit inside it; the clamp prevents the
+    // shape from extending past xRange when an expression overshoots.
+    const topStartX = Math.max(Math.min(topLeftX, topRightX), xMin);
+    const topEndX = Math.min(Math.max(topLeftX, topRightX), xMax);
+    const bottomStartX = Math.max(Math.min(bottomLeftX, bottomRightX), xMin);
+    const bottomEndX = Math.min(Math.max(bottomLeftX, bottomRightX), xMax);
+
+    const points: Vector[] = [];
 
     // -------------------------------------------------
     // Left boundary : xMin(y)
     // bottom -> top
     // -------------------------------------------------
     for (let i = 0; i <= samples; i++) {
-      const y = yMin + i * yStep;
+      const y = yMin + ((yMax - yMin) * i) / samples;
+      const x = this.evaluate(expressions.xMin, { y });
 
-      points.push({
-        x: xMinExpr.evaluate({ y }),
-        y,
-      });
+      if (x !== null) {
+        points.push({ x, y });
+      }
     }
 
     // -------------------------------------------------
     // Top boundary : yMax(x)
-    // left -> right
+    // top-left -> top-right
     // -------------------------------------------------
-    for (let i = 0; i <= samples; i++) {
-      const x = xMin + i * xStep;
+    // A zero-width span means the left and right boundaries already meet at
+    // the same top point (the top of a circle, for example), so there is
+    // nothing extra to add.
+    if (topStartX < topEndX) {
+      for (let i = 0; i <= samples; i++) {
+        const x = topStartX + ((topEndX - topStartX) * i) / samples;
+        const y = this.evaluate(expressions.yMax, { x });
 
-      points.push({
-        x,
-        y: yMaxExpr.evaluate({ x }),
-      });
+        if (y !== null) {
+          points.push({ x, y });
+        }
+      }
     }
 
     // -------------------------------------------------
     // Right boundary : xMax(y)
     // top -> bottom
     // -------------------------------------------------
-    for (let i = samples; i >= 0; i--) {
-      const y = yMin + i * yStep;
+    for (let i = 0; i <= samples; i++) {
+      const y = yMax - ((yMax - yMin) * i) / samples;
+      const x = this.evaluate(expressions.xMax, { y });
 
-      points.push({
-        x: xMaxExpr.evaluate({ y }),
-        y,
-      });
+      if (x !== null) {
+        points.push({ x, y });
+      }
     }
 
     // -------------------------------------------------
     // Bottom boundary : yMin(x)
-    // right -> left
+    // bottom-right -> bottom-left
     // -------------------------------------------------
-    for (let i = samples; i >= 0; i--) {
-      const x = xMin + i * xStep;
+    if (bottomStartX < bottomEndX) {
+      for (let i = 0; i <= samples; i++) {
+        const x = bottomEndX + ((bottomStartX - bottomEndX) * i) / samples;
+        const y = this.evaluate(expressions.yMin, { x });
 
-      points.push({
-        x,
-        y: yMinExpr.evaluate({ x }),
-      });
+        if (y !== null) {
+          points.push({ x, y });
+        }
+      }
     }
 
     return points;

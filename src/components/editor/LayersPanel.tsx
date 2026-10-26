@@ -130,7 +130,7 @@ function LayerRow({
     dropTarget?.id === data.id ? dropTarget.position : null;
 
   const handleSelect = (event: ReactMouseEvent) => {
-    if (event.metaKey || event.ctrlKey) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) {
       data.multiselect();
     } else {
       data.select();

@@ -29,16 +29,28 @@ function formatLabel(key: string): string {
 
 /** Screen styles stay in CSS pixels; design geometry uses world units. */
 function unitHint(key: string): string | null {
-  if (key === "strokeWidth" || key === "fontSize") return "px";
+  if (
+    key === "strokeWidth" ||
+    key === "gridStrokeWidth" ||
+    key === "circleStrokeWidth" ||
+    key === "radialStrokeWidth" ||
+    key === "fontSize"
+  ) {
+    return "px";
+  }
   if (
     key === "position" ||
     key === "radius" ||
     key === "width" ||
     key === "height" ||
+    key === "gridStep" ||
+    key === "labelStep" ||
+    key === "radialStep" ||
     key === "vertices"
   ) {
     return "units";
   }
+  if (key === "angleStep") return "°";
 
   return null;
 }
@@ -131,7 +143,19 @@ export function InspectorPanel() {
   ][];
 
   const transformKeys = new Set(["position", "scale", "opacity"]);
-  const appearanceKeys = new Set(["color", "strokeColor", "strokeWidth"]);
+  const appearanceKeys = new Set([
+    "color",
+    "strokeColor",
+    "strokeWidth",
+    "gridColor",
+    "axisColor",
+    "labelColor",
+    "gridStrokeWidth",
+    "circleColor",
+    "radialColor",
+    "circleStrokeWidth",
+    "radialStrokeWidth",
+  ]);
 
   const transform = entries.filter(([key]) => transformKeys.has(key));
   const appearance = entries.filter(([key]) => appearanceKeys.has(key));
