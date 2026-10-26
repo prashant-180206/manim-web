@@ -5,13 +5,16 @@ The user-facing overview lives in [`README.md`](./README.md); this file records
 the invariants, file map and verification steps that are easy to break.
 
 The repo is a React 19 + Vite 7 + Tailwind 4 + shadcn/ui editor around a custom
-Canvas 2D engine in `src/manim`. The editor is mounted at `/` and `/scene`; the
+Canvas 2D engine in `src/manim` and a three.js 3D engine in `src/manim3d`. The
+2D editor is mounted at `/` and `/scene`; the 3D editor is `/scene3d`. The
 legacy playground is `/playground` and the value lab is `/values`.
 
-**Current state:** the editor is usable end to end (create, arrange, inspect,
+**Current state:** the 2D editor is usable end to end (create, arrange, inspect,
 animate, save/open scenes). Canvas click-to-select and modifier-click
 multi-selection are wired. Dragging, marquee selection and z-order changes still
-happen through the panels.
+happen through the panels. The 3D editor can create, select, inspect, transform,
+save/open and undo/redo spheres and boxes; 3D animations, trackers and grouping
+are not implemented.
 
 ## Verification
 
@@ -61,6 +64,25 @@ EditorShell (src/components/editor/EditorShell.tsx)
 └── EditorContext = { scene, refresh(), log() }
 ```
 
+The 3D editor mirrors the shape on a separate stack:
+
+```text
+Scene3DProvider (src/context/scene3dContext.tsx)
+└── one Scene3D on its own WebGL canvas
+    ├── renderer.setAnimationLoop + THREE.Timer
+    ├── Camera3D
+    ├── Mobject3DManager → flat root list
+    ├── Selection3D (raycast)
+    └── light rig
+
+Editor3DShell (src/components/editor3d/Editor3DShell.tsx)
+├── views: Scene / Inspector / Camera
+├── CanvasPane + Scene3DCanvas (mounts scene3d.canvas)
+├── bottom panel: Console
+├── File menu: Save / Open / Close, Undo / Redo
+└── Editor3DContext = { scene, refresh(), log() }
+```
+
 ### Important files
 
 | File | Responsibility |
@@ -75,7 +97,8 @@ EditorShell (src/components/editor/EditorShell.tsx)
 | `src/components/editor/LayersPanel.tsx` | Front-to-back tree, DnD and arrange actions |
 | `src/components/editor/InspectorPanel.tsx` | Property editing, unit hints, center action |
 | `src/components/editor/AnimationsPanel.tsx` | Animation creation/removal |
-| `src/components/editor/TrackersPanel.tsx` | Tracker creation (number/vector), bindings, connections |
+| `src/components/editor/TrackersPanel.tsx` | Tracker creation (number/vector), values, expression rules |
+| `src/components/editor/TrackerLinksPanel.tsx` | Per-tracker property bindings and `TrackerTo` animations |
 | `src/components/editor/TimelinePanel.tsx` | Playback and timeline scrubbing |
 | `src/components/editor/ConsolePanel.tsx` | Log display |
 | `src/components/editor/sceneHistory.ts` | Snapshot-based undo/redo for editor mutations |
@@ -89,12 +112,27 @@ EditorShell (src/components/editor/EditorShell.tsx)
 | `src/manim/mobject/helpers/MobjectTree.ts` | `MobjectNode`, `roots` order, parent/children |
 | `src/manim/mobject/helpers/mobjectregistry.ts` | Constructs mobjects by `MobjectName` |
 | `src/manim/serialization/sceneSerializer.ts` | Format v3, validation, restore, v1/v2 migration |
-| `src/manim3d/scene3d.ts` | 3D renderer/scene/loop scaffold (**not wired**) |
+| `src/manim3d/scene3d.ts` | 3D renderer/scene/lights/loop, canvas input, selection ownership |
 | `src/manim3d/camera3d.ts` | **Only** 3D world↔screen conversion point |
+| `src/manim3d/utils/selection3d.ts` | Raycast picking, click + modifier multi-selection |
+| `src/manim3d/mobject/helpers/mobject3dManager.ts` | Flat root list, ids, add/delete/rename/restore |
+| `src/manim3d/serialization/scene3dSerializer.ts` | Format v1 serialize/parse/apply/clear |
+| `src/manim3d/UI/mobject3dUI.ts` | 3D creation palette and flat tree/action data |
 | `src/manim3d/README.md` | 2D→3D file map, conventions and next steps |
+| `src/context/scene3dContext.tsx` | Creates/disposes the single `Scene3D`; `useScene3D()` |
+| `src/components/Scene3DCanvas.tsx` | Mounts the 3D canvas, handles resize + DPR |
+| `src/pages/scene3d.tsx` | `/scene3d` loading page and editor mount |
+| `src/components/editor3d/Editor3DShell.tsx` | 3D layout, views, shortcuts, file menu, history, console |
+| `src/components/editor3d/editor3dContext.tsx` | `Editor3DContext`, `useEditor3D` |
+| `src/components/editor3d/Scene3DTreePanel.tsx` | 3D creation palette, flat list, rename, visibility/lock |
+| `src/components/editor3d/Inspector3DPanel.tsx` | 3D property editing, unit hints, `sync()` |
+| `src/components/editor3d/Camera3DPanel.tsx` | FOV and focus-target controls |
+| `src/components/editor3d/scene3dFiles.ts` | Download/read 3D scene files, empty-scene check |
+| `src/components/editor3d/scene3dHistory.ts` | Snapshot-based undo/redo for 3D mutations |
 | `src/manim/tracker/tracker.ts` | Scalar tracker plus vector parent/component model |
-| `src/manim/tracker/trackerSystem.ts` | Tracker registry, bindings, links, vector channel routing |
-| `src/manim/UI/trackerUI.ts` | Tracker UI data, vector creation and binding adapters |
+| `src/manim/tracker/trackerSystem.ts` | Tracker registry, bindings, expression rules, vector channel routing |
+| `src/manim/tracker/trackerAnimationRegistry.ts` | `TrackerTo` animation factory for numeric/vector trackers |
+| `src/manim/UI/trackerUI.ts` | Tracker UI data, vector creation, animation and expression adapters |
 | `src/manim/UI/mobjectUI.ts` | Tree UI data and pre-order `zIndex` |
 | `src/manim/utils/value.ts` | `Value<T>`, `ValueType`, `Values` factories |
 | `src/components/valueEditors.tsx` | Editor per `ValueType`, including color picker |
@@ -102,26 +140,37 @@ EditorShell (src/components/editor/EditorShell.tsx)
 
 ## Invariants — do not break these
 
-### 3D module (scaffold, not wired)
+### 3D module (wired at `/scene3d`)
 
-`src/manim3d/` is a three.js scaffold mapped against `src/manim/`; the file
-table and conventions live in
-[`src/manim3d/README.md`](./src/manim3d/README.md). `Scene3D` owns the WebGL
-renderer, scene graph and loop, `Camera3D` is the only 3D world↔screen
-conversion point, and `Mobject3DManager` currently keeps a flat root list
-(grouping, tree order and selection are deferred).
+`src/manim3d/` is the three.js counterpart of `src/manim/`; the file table and
+conventions live in [`src/manim3d/README.md`](./src/manim3d/README.md).
+`Scene3D` owns the WebGL renderer, scene graph, lights, loop, canvas input and
+selection. `Camera3D` is the only 3D world↔screen conversion point.
+`Mobject3DManager` keeps a flat root list.
 
-- Nothing imports `src/manim3d` yet. Do not add a route, provider, editor panel
-  or canvas wiring without an explicit 3D task.
+- The 3D editor is a separate stack: `Scene3DProvider` owns exactly one
+  `Scene3D`, `Scene3DCanvas` mounts its canvas, and
+  `src/components/editor3d/` provides the shell and panels. Do not reuse
+  `ManimProvider`, `EditorContext`, `EditorShell` or any 2D-only panel for 3D.
+- `Scene3D` attaches canvas input itself: click replaces the selection,
+  Shift/Ctrl/Cmd-click toggles the multi-selection. Picking skips hidden,
+  locked and zero-opacity mobjects. Do not add drag, marquee or pan assumptions.
 - Reuse `Signal`, `Value`/`Values`, `ValueType` and `PIXELS_PER_UNIT`. 3D-only
-  factories live in `values3d.ts`. `position`/`scale`/`radius` stay in world
-  units, `opacity` is unitless and `rotation` is radians.
+  factories live in `values3d.ts`. `position`/`scale`/`radius`/`width`/`height`/
+  `depth` stay in world units, `opacity` is unitless and `rotation` is radians.
 - The 3D scene format is separate: `manim-web-scene3d` v1 in
-  `serialization/scene3dSerializer.ts` (types/constants only). Do not extend
-  the 2D v3 document with 3D fields.
+  `serialization/scene3dSerializer.ts` (serialize/parse/apply/clear). Do not
+  extend the 2D v3 document with 3D fields.
+- `parseScene3DDocument` validates before mutation. `applyScene3D` clears the
+  scene on restore failure, never leaving it half-built.
 - `Mobject3D.sync()` pushes properties to three.js; mutating a `Value` alone
-  does nothing. Materials are disposed by the base class, geometry by the
-  primitive.
+  does nothing. Inspector edits must call `sync()` explicitly. Materials are
+  disposed by the base class, geometry by the primitive.
+- `VectorValueEditor` renders a Z control only when the stored vector has a
+  numeric `z`, so 2D x/y editing stays unchanged.
+- Grouping, animations, trackers, OrbitControls and a 3D timeline are
+  deliberately absent. Adding them is a separate task; extend the README and
+  this section when they land.
 
 ### 1. One scene instance
 
@@ -219,7 +268,7 @@ Rules:
   world positions and are converted during parsing.
 - Bump `SCENE_FILE_VERSION` for incompatible changes and add a migration path.
 
-### 8. Vector trackers
+### 8. Vector trackers and tracker expressions
 
 - A vector tracker is one public `Tracker` with `components.x` and
   `components.y`. The children are real scalar `Tracker`s with their own ids.
@@ -235,12 +284,27 @@ Rules:
   `mobject.trackerConnector.getConnectorFactory(property).getValue()`. Register
   per-kind connectors in `TrackerConnectorRegistry.registerMobjectConnectors`
   and keep the target a `Value<number>` or `Value<Vector>`; the provider owns
-  the definitive list shown in the Trackers panel.
-- Vector trackers cannot bind numeric properties and cannot be tracker-link
-  endpoints; reject those cases with explicit errors.
+  the definitive list shown in the Links panel.
+- Vector trackers cannot bind numeric properties; reject those cases with
+  explicit errors.
 - Vector properties serialise with `kind: "vector"` and component ids/values,
   plus optional `yExpression` on bindings.
   `restoreVectorTracker()` must restore and reserve both component ids.
+- Tracker-to-tracker links are expression rules stored globally in
+  `TrackerSystem`. A rule targets a parent tracker as a whole vector or one
+  `.x`/`.y` channel, and may depend on several trackers. Components are channels,
+  never direct link endpoints; target the parent and pass `targetComponent`.
+- Expressions use sanitized tracker names plus `.x`/`.y`. Bare vector references
+  are resolved per evaluated axis, so `tr1 = tr2 + tr3` is component-wise for a
+  vector target. A bare vector in a numeric/single-channel expression is
+  rejected. Optional assignment syntax (`tr1 = ...`) is stripped by
+  `stripTargetAssignment`.
+- The legacy single-source `from` field stays supported as `t`; new rules store
+  the resolved `variables` alias → tracker-id map so restore does not depend on
+  tracker names. Deleting any involved tracker/component removes the rule.
+- `TrackerTo` lives in `TrackerAnimationRegistry`, so tracker targets share the
+  mobject timeline, serialization and playback. It interpolates a numeric
+  value or both vector components.
 
 ### 9. Reactive UI updates after mutations
 
@@ -271,7 +335,7 @@ behaviour.
    `useEditor()`.
 2. Add an entry to `views` (id, label, icon, shortcut) in `EditorShell.tsx`.
 3. Extend the `EditorView` union and `renderPanel()` switch.
-4. If it needs a new shortcut digit, keep `1`–`5` order intuitive.
+4. If it needs a new shortcut digit, keep `1`–`6` order intuitive.
 
 ### Add an editable mobject property
 
@@ -298,24 +362,45 @@ behaviour.
 ### Add an animation
 
 1. Add the name to `AnimationName`.
-2. Register a factory in `AnimationRegistry.registerBaseAnimations`.
+2. Register a factory in `AnimationRegistry.registerBaseAnimations` for mobjects
+   or `TrackerAnimationRegistry.registerBaseAnimations` for tracker targets.
 3. Ensure its params are serialisable (prefer `Value<T>` inputs).
-4. Update `AnimationsPanel` if it needs custom controls.
+4. Update `AnimationsPanel` / `TrackersPanel` if it needs custom controls.
 5. Existing scene files name the animation; do not rename enum values without a
    migration.
+6. Tracker animations serialise `targetType: "tracker"`; keep mobject target
+   inference working for older v3 files that omit the field.
 
 ## Known traps / current limitations
 
 - **Canvas pointer input is selection-only.** `Scene.initializeInput()` wires
   `pointerdown` for click and modifier-click selection. `InputManager` /
   `SceneEvents` are not wired; do not assume drag, marquee, pan or zoom works.
+- **The 3D canvas is also selection-only.** `Scene3D` owns its own
+  `pointerdown` handler and `Selection3D`; there is no drag, marquee, pan or
+  OrbitControls. Raycast picking ignores hidden, locked and zero-opacity
+  objects.
+- **3D scenes are flat.** `Mobject3DManager` keeps a single root list in
+  insertion order; there is no grouping, reparenting, layers panel or z-order
+  API. The Scene panel lists roots only.
+- **The 3D editor has no animations, trackers or timeline.** Only Scene,
+  Inspector and Camera panels exist, and the bottom panel is Console only.
+  Do not wire 2D-only panels into `Editor3DShell`.
+- **3D inspector edits need `sync()`.** Mutating a `Value` alone does not update
+  the three.js node; `Inspector3DPanel` calls `mobject.sync()` after edits.
+- **3D undo/redo is snapshot-based and resets on open/close.** It lives in
+  `components/editor3d/scene3dHistory.ts`, excludes `savedAt` and viewport size
+  from the signature, and restores selection separately from the scene.
 - **No autosave.** Save downloads JSON, Open uses a file input, Close confirms
   only when the scene is non-empty. Undo/redo is snapshot-based and session-only
   (`sceneHistory.ts`), and is reset when a scene is opened or closed.
 - **`Scale`, `Rotate`, `Transform` are enum-only.** No factory is registered.
-- **Tracker links are numeric-only.** Vector trackers bind directly to
-  `position`/`scale`; they cannot be link sources or targets. Bindings target the
-  parent tracker, never a component.
+- **Tracker expression rules target the parent tracker.** Choose a whole-vector
+  or `.x`/`.y` channel; components are not direct link endpoints. `TrackerTo`
+  animations target the parent as well.
+- **Tracker expression aliases come from sanitized names.** Spaces and symbols
+  become `_`; duplicate names get `_2`, `_3`, … suffixes. The Trackers panel
+  lists the usable aliases.
 - **Tracker bindings only accept number/vector connectors.** Strings, booleans,
   colors and raw `Range` values are not bindable; expose scalar min/max adapters
   when a range should be animatable.
@@ -348,5 +433,9 @@ behaviour.
 - [ ] New persisted state is added to `SceneDocument` + validation + restore.
 - [ ] Vector tracker changes preserve parent/component ids, bindings and both
       axis expressions across save/restore.
+- [ ] Tracker expression rules round-trip target channel, expression, variables
+      and optional legacy `from`.
+- [ ] Tracker-targeted animations round-trip `targetType: "tracker"` and restore
+      after trackers exist.
 - [ ] Panels call `refresh()` after mutating engine state.
 - [ ] `git status` shows only intended changes.

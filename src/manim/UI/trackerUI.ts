@@ -1,7 +1,11 @@
 import { Scene } from "../scene";
 import { TrackerConnectionName } from "../tracker/trackerconnectorNames";
 import { Mobject } from "../mobject/mobect";
-import { ValueType } from "../utils/value";
+import { ValueType, Values } from "../utils/value";
+import { AnimationName } from "../animation/animationName";
+import type { AnimationInput } from "../animation/animationProvider";
+import type { EasingFunction } from "../utils/easing";
+import type { TrackerComponent } from "../tracker/tracker";
 import type { Vector } from "../utils/types";
 
 export interface TrackerPropertyOptionUIData {
@@ -18,6 +22,12 @@ export interface TrackerComponentUIData {
   setValue(value: number): void;
 }
 
+export interface TrackerExpressionVariableUIData {
+  name: string;
+  trackerId: string;
+  isVector: boolean;
+}
+
 export interface TrackerUIData {
   id: string;
   name: string;
@@ -29,12 +39,18 @@ export interface TrackerUIData {
   components: TrackerComponentUIData[];
 
   propertyConnections: PropertyConnectionUIData[];
-  trackerConnections: TrackerConnectionUIData[];
+  expressions: TrackerExpressionUIData[];
 
   setValue(value: number): void;
   setVector(value: Vector): void;
   rename(name: string): void;
   remove(): void;
+
+  animateTo(
+    value: number | Vector,
+    duration: number,
+    easing: EasingFunction,
+  ): string;
 }
 
 export interface PropertyConnectionUIData {
@@ -51,13 +67,14 @@ export interface PropertyConnectionUIData {
   remove(): void;
 }
 
-export interface TrackerConnectionUIData {
+export interface TrackerExpressionUIData {
   id: string;
 
-  from: string;
   target: string;
+  targetComponent: TrackerComponent | null;
 
   expression: string;
+  sources: string[];
 
   remove(): void;
 }
@@ -86,6 +103,12 @@ export class TrackerUI {
           option.valueType === ValueType.number ||
           option.valueType === ValueType.vector,
       );
+  }
+
+  static getExpressionVariables(
+    scene: Scene,
+  ): TrackerExpressionVariableUIData[] {
+    return scene.trackerSystem.getExpressionVariables();
   }
 
   static getTrackers(scene: Scene): TrackerUIData[] {
@@ -131,18 +154,14 @@ export class TrackerUI {
           }),
         ),
 
-        trackerConnections: [...meta.trackerConnections.values()].map(
-          (conn) => ({
-            id: conn.id,
-
-            from: conn.from,
-            target: conn.target,
-
-            expression: conn.expression.toString(),
-
-            remove: () => system.disconnectTrackers(conn.id),
-          }),
-        ),
+        expressions: system.getTrackerExpressions(tracker.id).map((rule) => ({
+          id: rule.id,
+          target: rule.target,
+          targetComponent: rule.targetComponent,
+          expression: rule.expression,
+          sources: rule.sources,
+          remove: () => system.disconnectTrackers(rule.id),
+        })),
 
         setValue: (value) => {
           if (tracker.isVector) {
@@ -155,6 +174,22 @@ export class TrackerUI {
         setVector: (value) => tracker.setVector(value),
         rename: (name) => tracker.rename(name),
         remove: () => system.removeTracker(tracker.id),
+
+        animateTo: (value, duration, easing) => {
+          const input: AnimationInput = {
+            duration: Values.number(Math.max(0.0001, duration)),
+            easing,
+            value: tracker.isVector
+              ? Values.vector(value as Vector)
+              : Values.number(value as number),
+          };
+
+          return scene.animationSystem.addTo(
+            tracker,
+            AnimationName.TrackerTo,
+            input,
+          );
+        },
       };
     });
   }
@@ -186,12 +221,16 @@ export class TrackerUI {
     );
   }
 
-  static connectTrackers(
+  static setTrackerExpression(
     scene: Scene,
-    from: string,
     target: string,
     expression: string,
+    targetComponent?: TrackerComponent | null,
   ): void {
-    scene.trackerSystem.connectTrackers(from, target, expression);
+    scene.trackerSystem.setTrackerExpression(
+      target,
+      expression,
+      targetComponent,
+    );
   }
 }

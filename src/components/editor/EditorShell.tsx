@@ -7,12 +7,14 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import {
+  Box,
   Boxes,
   CircleQuestionMark,
   Clapperboard,
   FileCode,
   FileX,
   FolderOpen,
+  Link2,
   ListTree,
   MonitorPlay,
   PanelBottomClose,
@@ -48,6 +50,7 @@ import { SceneTreePanel } from "./SceneTreePanel";
 import { InspectorPanel } from "./InspectorPanel";
 import { AnimationsPanel } from "./AnimationsPanel";
 import { TrackersPanel } from "./TrackersPanel";
+import { TrackerLinksPanel } from "./TrackerLinksPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { ConsolePanel } from "./ConsolePanel";
 import {
@@ -84,7 +87,8 @@ type EditorView =
   | "layers"
   | "inspector"
   | "animations"
-  | "trackers";
+  | "trackers"
+  | "links";
 type BottomTab = "timeline" | "console";
 
 interface ViewDefinition {
@@ -110,6 +114,7 @@ const views: ViewDefinition[] = [
     shortcut: "3",
   },
   { id: "trackers", label: "Trackers", icon: Workflow, shortcut: "4" },
+  { id: "links", label: "Links", icon: Link2, shortcut: "6" },
 ];
 
 const shortcuts: { keys: string[]; label: string }[] = [
@@ -677,6 +682,8 @@ export function EditorShell({ scene }: EditorShellProps) {
         return <AnimationsPanel />;
       case "trackers":
         return <TrackersPanel />;
+      case "links":
+        return <TrackerLinksPanel />;
       default:
         return null;
     }
@@ -778,6 +785,15 @@ export function EditorShell({ scene }: EditorShellProps) {
             </div>
 
             <div className="flex items-center gap-0.5">
+              <Link
+                to="/scene3d"
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "xs" }),
+                  "text-muted-foreground",
+                )}
+              >
+                <Box /> 3D scene
+              </Link>
               <Link
                 to="/playground"
                 className={cn(

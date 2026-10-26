@@ -3,8 +3,10 @@
 | src/manim3d — public surface
 |--------------------------------------------------------------------------
 |
-| Nothing imports this barrel yet. The module is a scaffold for a future 3D
-| editor and is not wired into routes, context or the editor shell.
+| Runtime pieces for the 3D editor mounted at `/scene3d`. The editor layer
+| itself lives in `src/components/editor3d`, with its provider in
+| `src/context/scene3dContext.tsx` and canvas in
+| `src/components/Scene3DCanvas.tsx`.
 |
 */
 
@@ -35,6 +37,7 @@ export { Mobject3DRegistry } from "./mobject/helpers/mobject3dRegistry";
 export { Mobject3DManager } from "./mobject/helpers/mobject3dManager";
 
 export { Values3D } from "./utils/values3d";
+export { Selection3D } from "./utils/selection3d";
 export {
   clone3,
   one3,
@@ -44,8 +47,23 @@ export {
 } from "./utils/types3d";
 
 export {
+  Mobject3DUI,
+  MOBJECT3D_DESCRIPTIONS,
+  MOBJECT3D_ICONS,
+  MOBJECT3D_LABELS,
+  type Mobject3DCreationUIData,
+  type Mobject3DTreeControlData,
+} from "./UI/mobject3dUI";
+
+export {
   SCENE3D_FILE_FORMAT,
   SCENE3D_FILE_VERSION,
+  applyScene3D,
+  clearScene3D,
+  hasScene3DContent,
+  parseScene3DDocument,
+  serializeScene3D,
+  type Scene3DApplySummary,
   type Scene3DDocument,
   type SerializedAnimation3D,
   type SerializedCamera3D,

@@ -187,7 +187,9 @@ export function AnimationsPanel() {
 
   const creators = AnimationUI.getAnimCreationUIData(scene, mobject);
   const animations = [...scene.animationSystem.all()].filter(
-    (animation) => animation.target.id === mobject.id,
+    (animation) =>
+      animation.target.animationTargetType === "mobject" &&
+      animation.target.id === mobject.id,
   );
 
   return (

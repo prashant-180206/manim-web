@@ -1,5 +1,6 @@
 import { Signal } from "../events/signal";
 import { Value } from "../utils/value";
+import { AnimationProvider } from "../animation/animationProvider";
 import type { Vector } from "../utils/types";
 
 export type TrackerComponent = "x" | "y";
@@ -13,6 +14,10 @@ export class Tracker {
   readonly value: Value<number>;
   editable = true;
   name = "";
+  readonly animationTargetType = "tracker" as const;
+
+  /** Per-tracker animation factories; tracker targets use the same timeline. */
+  readonly animations = new AnimationProvider<Tracker>(this);
 
   private _components: TrackerComponents | null = null;
   private _parent: Tracker | null = null;

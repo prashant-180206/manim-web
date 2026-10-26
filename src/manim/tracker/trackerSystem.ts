@@ -1,10 +1,11 @@
-import { Tracker } from "./tracker";
-import { Expression, Parser } from "expr-eval";
+import { Tracker, type TrackerComponent } from "./tracker";
+import { Expression, Parser, type Values as ExpressionScope } from "expr-eval";
 import { Scene } from "../scene";
 import { TrackerConnectionName } from "./trackerconnectorNames";
 import { Connection, Signal } from "../events/signal";
 import { Value, ValueType } from "../utils/value";
 import { DependencyGraph } from "./dependencyGraph";
+import { TrackerAnimationRegistry } from "./trackerAnimationRegistry";
 import type { Mobject } from "../mobject/mobect";
 import type { Vector } from "../utils/types";
 
@@ -19,24 +20,98 @@ interface PropertyConnectionData {
   connections: Connection<[Value<number>]>[];
 }
 
-interface TrackerConnectionData {
+/**
+ * One expression rule: `target[.x|.y] = expression`.
+ *
+ * Expressions may reference tracker names directly (`tr2 + tr3`) and vector
+ * components through member access (`tr2.x`). Rules are stored globally because
+ * a single rule can depend on several source trackers.
+ */
+interface TrackerExpressionData {
   id: string;
-  from: string;
   target: string;
-  expression: Expression;
-  connection: Connection<any>;
+  targetComponent: TrackerComponent | null;
+
+  parsed: Expression;
+  expressionText: string;
+
+  /** Legacy `from` source exposed as `t` inside the expression. */
+  primarySource: string | null;
+
+  /** Alias used in the expression -> parent tracker id. */
+  variableMap: Map<string, string>;
+
+  /** Top-level tracker ids referenced by the expression. */
+  sourceIds: string[];
+
+  /** Scalar/component tracker ids whose signals re-evaluate the rule. */
+  dependencies: string[];
+
+  /** Scalar/component tracker ids written by the rule. */
+  targetDependencies: string[];
+
+  connections: Connection<[Value<number>]>[];
+}
+
+export interface TrackerExpressionDefinition {
+  target: string;
+  expression: string;
+  /** Legacy primary source, made available as `t`. */
+  from?: string;
+  targetComponent?: TrackerComponent | null;
+  /** Saved alias -> tracker id map, used when restoring a scene. */
+  variables?: Record<string, string>;
+}
+
+export interface TrackerExpressionInfo {
+  id: string;
+  target: string;
+  targetComponent: TrackerComponent | null;
+  expression: string;
+  sources: string[];
+  variables: Record<string, string>;
+  /** Legacy primary source exposed as `t`, if the rule was created that way. */
+  from?: string;
+}
+
+export interface TrackerExpressionVariable {
+  name: string;
+  trackerId: string;
+  isVector: boolean;
 }
 
 interface TrackerMeta {
   tracker: Tracker;
 
-  trackerConnections: Map<string, TrackerConnectionData>;
   propertyConnections: Map<string, PropertyConnectionData>;
+}
+
+interface ResolvedReferences {
+  variableMap: Map<string, string>;
+  sourceIds: Set<string>;
+  dependencies: Set<string>;
+  bareVectorAliases: Set<string>;
+}
+
+function sanitizeExpressionIdentifier(name: string): string {
+  const base = name.trim().replace(/[^A-Za-z0-9_]/g, "_") || "tracker";
+
+  return /^[0-9]/.test(base) ? `t_${base}` : base;
+}
+
+function graphEdgeKey(from: string, to: string): string {
+  return `${from}->${to}`;
 }
 
 export class TrackerSystem {
   // Trackers
   private readonly trackers = new Map<string, TrackerMeta>();
+
+  // Expression rules, keyed by connection id.
+  private readonly expressions = new Map<string, TrackerExpressionData>();
+
+  // Multiple rules may share a dependency edge; only remove it at zero.
+  private readonly graphEdgeUses = new Map<string, number>();
 
   readonly onTrackerAdded = new Signal<[Tracker]>();
   readonly onTrackerRemoved = new Signal<[string]>();
@@ -102,6 +177,7 @@ export class TrackerSystem {
     const tracker = new Tracker(value, id);
 
     tracker.rename(name);
+    TrackerAnimationRegistry.registerBaseAnimations(tracker);
 
     this.createMeta(tracker, announce);
 
@@ -125,6 +201,7 @@ export class TrackerSystem {
     const tracker = Tracker.createVector(id, value, { x: xId, y: yId });
 
     tracker.rename(name);
+    TrackerAnimationRegistry.registerBaseAnimations(tracker);
 
     const components = tracker.components!;
 
@@ -140,7 +217,6 @@ export class TrackerSystem {
   private createMeta(tracker: Tracker, announce: boolean): TrackerMeta {
     const meta: TrackerMeta = {
       tracker,
-      trackerConnections: new Map(),
       propertyConnections: new Map(),
     };
 
@@ -163,6 +239,10 @@ export class TrackerSystem {
     for (const id of [...this.trackers.keys()]) {
       this.removeTracker(id);
     }
+
+    this.expressions.clear();
+    this.graphEdgeUses.clear();
+    this.graph.clear();
   }
 
   private getTrackerMeta(id: string): TrackerMeta {
@@ -173,6 +253,11 @@ export class TrackerSystem {
     return meta;
   }
 
+  /** Look up a tracker by id (including vector components). */
+  findTracker(id: string): Tracker | undefined {
+    return this.trackers.get(id)?.tracker;
+  }
+
   removeTracker(id: string): void {
     const meta = this.trackers.get(id);
 
@@ -181,6 +266,13 @@ export class TrackerSystem {
     if (!meta) return;
 
     const components = meta.tracker.components;
+
+    this.scene.animationSystem?.removeTarget(id);
+
+    if (components) {
+      this.scene.animationSystem?.removeTarget(components.x.id);
+      this.scene.animationSystem?.removeTarget(components.y.id);
+    }
 
     this.removeTrackerInternal(id);
 
@@ -202,13 +294,29 @@ export class TrackerSystem {
       this.deleteConnection(connection.id);
     }
 
-    // tracker -> tracker
-    for (const connection of [...meta.trackerConnections.values()]) {
-      this.disconnectTrackers(connection.id);
+    // Any expression rule that references or targets this tracker is removed
+    // with it. Components and their parent are both matched.
+    for (const rule of [...this.expressions.values()]) {
+      if (this.expressionInvolvesTracker(rule, id)) {
+        this.disconnectTrackers(rule.id);
+      }
     }
 
     this.graph.removeNode(id);
     this.trackers.delete(id);
+  }
+
+  private expressionInvolvesTracker(
+    rule: TrackerExpressionData,
+    trackerId: string,
+  ): boolean {
+    return (
+      rule.target === trackerId ||
+      rule.primarySource === trackerId ||
+      rule.dependencies.includes(trackerId) ||
+      rule.targetDependencies.includes(trackerId) ||
+      [...rule.variableMap.values()].includes(trackerId)
+    );
   }
 
   addConnection(
@@ -367,82 +475,496 @@ export class TrackerSystem {
     }
   }
 
+  /**
+   * Legacy single-source link: `destination = expression(t)`.
+   *
+   * New code can use `setTrackerExpression()` for multi-source expressions.
+   */
   connectTrackers(from: string, target: string, expression: string): string {
-    return this.createTrackerConnection(from, target, expression);
+    return this.createTrackerExpression({ from, target, expression });
+  }
+
+  /** Create `target[.component] = expression` from tracker names. */
+  setTrackerExpression(
+    target: string,
+    expression: string,
+    targetComponent?: TrackerComponent | null,
+  ): string {
+    return this.createTrackerExpression({
+      target,
+      expression,
+      targetComponent,
+    });
   }
 
   restoreTrackerConnection(
-    from: string,
-    target: string,
-    expression: string,
+    definition: TrackerExpressionDefinition,
   ): string {
-    return this.createTrackerConnection(from, target, expression);
+    return this.createTrackerExpression(definition);
   }
 
-  private createTrackerConnection(
-    from: string,
-    target: string,
-    expression: string,
+  private createTrackerExpression(
+    definition: TrackerExpressionDefinition,
   ): string {
-    if (this.graph.createsCycle(from, target)) {
-      throw new Error("Tracker dependency cycle detected.");
-    }
+    const targetMeta = this.getTrackerMeta(definition.target);
+    const targetTracker = targetMeta.tracker;
 
-    const source = this.getTrackerMeta(from);
-    const destination = this.getTrackerMeta(target);
-
-    if (source.tracker.isVector || destination.tracker.isVector) {
+    if (targetTracker.isComponent) {
       throw new Error(
-        "Tracker links support numeric trackers. Bind vector trackers to vector properties instead.",
+        "Target the parent vector tracker and choose an x/y channel instead.",
       );
     }
 
-    if (source.tracker.isComponent || destination.tracker.isComponent) {
+    const targetComponent = definition.targetComponent ?? null;
+
+    if (targetComponent && !targetTracker.isVector) {
       throw new Error(
-        "Tracker links must target the vector tracker, not one of its components.",
+        `Tracker '${targetTracker.name}' is numeric; it has no '${targetComponent}' component.`,
       );
     }
 
-    const parsed = this.parser.parse(expression);
+    const aliases = definition.variables
+      ? this.aliasesFromVariableMap(definition.variables)
+      : this.buildExpressionAliases();
+
+    if (definition.from) {
+      const primary = this.getTrackerMeta(definition.from).tracker;
+
+      if (!aliases.has("t")) {
+        aliases.set("t", primary);
+      }
+    }
+
+    const expressionText = this.stripTargetAssignment(
+      definition.expression,
+      targetTracker,
+      targetComponent,
+      aliases,
+    );
+
+    let parsed: Expression;
+
+    try {
+      parsed = this.parser.parse(expressionText);
+    } catch (error) {
+      throw new Error(
+        `Invalid tracker expression '${expressionText}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const references = this.resolveExpressionReferences(parsed, aliases);
+
+    if (
+      (!targetTracker.isVector || targetComponent) &&
+      references.bareVectorAliases.size > 0
+    ) {
+      const names = [...references.bareVectorAliases].join(", ");
+
+      throw new Error(
+        `Vector tracker ${names} must be referenced as ${names}.x or ${names}.y in a numeric expression.`,
+      );
+    }
+
+    const targetDependencies = this.targetDependencies(
+      targetTracker,
+      targetComponent,
+    );
+
+    for (const dependency of references.dependencies) {
+      for (const targetDependency of targetDependencies) {
+        if (this.graph.createsCycle(dependency, targetDependency)) {
+          throw new Error("Tracker dependency cycle detected.");
+        }
+      }
+    }
+
+    const evaluate = (axis: TrackerComponent) =>
+      this.evaluateExpression(
+        parsed,
+        references.variableMap,
+        expressionText,
+        axis,
+      );
+
+    const initial =
+      targetTracker.isVector && !targetComponent
+        ? { x: evaluate("x"), y: evaluate("y") }
+        : { x: evaluate("x"), y: evaluate("x") };
+
     const id = this.ids.next("tconn_");
-
-    const connection = source.tracker.changed.connect((value) => {
-      destination.tracker.set(parsed.evaluate({ t: value.get() }));
-    });
-
-    this.graph.addEdge(from, target);
-
-    source.trackerConnections.set(id, {
+    const rule: TrackerExpressionData = {
       id,
-      from,
-      target,
-      expression: parsed,
-      connection,
-    });
+      target: targetTracker.id,
+      targetComponent,
 
+      parsed,
+      expressionText,
+
+      primarySource: definition.from ?? null,
+      variableMap: references.variableMap,
+      sourceIds: [...references.sourceIds],
+      dependencies: [...references.dependencies],
+      targetDependencies,
+
+      connections: [],
+    };
+
+    for (const dependency of references.dependencies) {
+      const dependencyTracker = this.getTrackerMeta(dependency).tracker;
+
+      rule.connections.push(
+        dependencyTracker.changed.connect(() => {
+          try {
+            this.writeExpressionValue(rule, this.evaluateRule(rule));
+          } catch (error) {
+            console.error(
+              `Tracker expression '${rule.expressionText}' failed:`,
+              error,
+            );
+          }
+        }),
+      );
+    }
+
+    for (const dependency of references.dependencies) {
+      for (const targetDependency of targetDependencies) {
+        this.addGraphEdge(dependency, targetDependency);
+      }
+    }
+
+    this.expressions.set(id, rule);
+    this.writeExpressionValue(rule, initial);
     this.onConnectionsChanged.emit();
 
     return id;
   }
 
-  disconnectTrackers(id: string): void {
-    for (const meta of this.trackers.values()) {
-      const connection = meta.trackerConnections.get(id);
+  private aliasesFromVariableMap(
+    variables: Record<string, string>,
+  ): Map<string, Tracker> {
+    const aliases = new Map<string, Tracker>();
 
-      if (!connection) continue;
+    for (const [alias, id] of Object.entries(variables)) {
+      const tracker = this.getTrackerMeta(id).tracker;
 
-      connection.connection.disconnect();
+      if (tracker.isComponent) {
+        throw new Error(
+          `Saved expression alias '${alias}' points at a component tracker.`,
+        );
+      }
 
-      this.graph.removeEdge(connection.from, connection.target);
+      aliases.set(alias, tracker);
+    }
 
-      meta.trackerConnections.delete(id);
-      this.onConnectionsChanged.emit();
+    return aliases;
+  }
 
+  /**
+   * Sanitised tracker names are the expression identifiers. Duplicate names get
+   * a `_2`, `_3`, … suffix, and vector components are reached with `.x`/`.y`.
+   */
+  private buildExpressionAliases(): Map<string, Tracker> {
+    const aliases = new Map<string, Tracker>();
+    const used = new Set<string>();
+
+    for (const meta of this.getTrackerInfo()) {
+      const tracker = meta.tracker;
+      const base = sanitizeExpressionIdentifier(tracker.name);
+
+      let alias = base;
+      let suffix = 2;
+
+      while (used.has(alias)) {
+        alias = `${base}_${suffix}`;
+        suffix++;
+      }
+
+      used.add(alias);
+      aliases.set(alias, tracker);
+    }
+
+    return aliases;
+  }
+
+  private stripTargetAssignment(
+    expression: string,
+    target: Tracker,
+    targetComponent: TrackerComponent | null,
+    aliases: Map<string, Tracker>,
+  ): string {
+    const trimmed = expression.trim();
+    const match = trimmed.match(
+      /^([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z_][A-Za-z0-9_]*))?\s*=(?!=)\s*([\s\S]+)$/,
+    );
+
+    if (!match) return trimmed;
+
+    const [, alias, member, right] = match;
+    const tracker = aliases.get(alias);
+
+    if (!tracker || tracker.id !== target.id) {
+      throw new Error(
+        `The left side of '${trimmed}' must be the target tracker '${target.name}'.`,
+      );
+    }
+
+    if (member !== undefined && member !== "x" && member !== "y") {
+      throw new Error("Only .x and .y component assignments are supported.");
+    }
+
+    if (targetComponent && member !== targetComponent) {
+      throw new Error(
+        `This rule targets ${target.name}.${targetComponent}; write that on the left side.`,
+      );
+    }
+
+    if (!targetComponent && member !== undefined) {
+      throw new Error(
+        `Choose the '${member}' target channel instead of assigning to ${target.name}.${member}.`,
+      );
+    }
+
+    return right.trim();
+  }
+
+  private resolveExpressionReferences(
+    parsed: Expression,
+    aliases: Map<string, Tracker>,
+  ): ResolvedReferences {
+    const references: ResolvedReferences = {
+      variableMap: new Map(),
+      sourceIds: new Set(),
+      dependencies: new Set(),
+      bareVectorAliases: new Set(),
+    };
+
+    for (const symbol of parsed.variables({ withMembers: true })) {
+      const [alias, member, ...rest] = symbol.split(".");
+
+      if (rest.length > 0) {
+        throw new Error(`Unsupported tracker reference '${symbol}'.`);
+      }
+
+      const tracker = aliases.get(alias);
+
+      if (!tracker) {
+        throw new Error(
+          `Unknown tracker '${alias}' in expression. Available trackers: ${[
+            ...aliases.keys(),
+          ].join(", ")}.`,
+        );
+      }
+
+      if (member !== undefined) {
+        if (member !== "x" && member !== "y") {
+          throw new Error(
+            `Tracker '${alias}' only exposes .x and .y components.`,
+          );
+        }
+
+        if (!tracker.isVector) {
+          throw new Error(
+            `Tracker '${alias}' is numeric and has no .${member} component.`,
+          );
+        }
+
+        references.dependencies.add(tracker.components![member].id);
+      } else if (tracker.isVector) {
+        references.bareVectorAliases.add(alias);
+        references.dependencies.add(tracker.components!.x.id);
+        references.dependencies.add(tracker.components!.y.id);
+      } else {
+        references.dependencies.add(tracker.id);
+      }
+
+      references.variableMap.set(alias, tracker.id);
+      references.sourceIds.add(tracker.id);
+    }
+
+    return references;
+  }
+
+  private targetDependencies(
+    tracker: Tracker,
+    targetComponent: TrackerComponent | null,
+  ): string[] {
+    if (targetComponent) {
+      return [tracker.components![targetComponent].id];
+    }
+
+    if (tracker.isVector) {
+      return [tracker.components!.x.id, tracker.components!.y.id];
+    }
+
+    return [tracker.id];
+  }
+
+  private evaluateRule(rule: TrackerExpressionData): {
+    x: number;
+    y: number;
+  } {
+    const target = this.getTrackerMeta(rule.target).tracker;
+
+    if (target.isVector && !rule.targetComponent) {
+      return {
+        x: this.evaluateExpression(
+          rule.parsed,
+          rule.variableMap,
+          rule.expressionText,
+          "x",
+        ),
+        y: this.evaluateExpression(
+          rule.parsed,
+          rule.variableMap,
+          rule.expressionText,
+          "y",
+        ),
+      };
+    }
+
+    const x = this.evaluateExpression(
+      rule.parsed,
+      rule.variableMap,
+      rule.expressionText,
+      "x",
+    );
+
+    return { x, y: x };
+  }
+
+  /**
+   * Bare vector variables use the current axis, so `tr1 = tr2 + tr3` performs
+   * component-wise vector arithmetic. Member access (`tr2.x`) always reads that
+   * specific component.
+   */
+  private evaluateExpression(
+    parsed: Expression,
+    variableMap: Map<string, string>,
+    expressionText: string,
+    axis: TrackerComponent,
+  ): number {
+    const scope: ExpressionScope = {};
+
+    for (const [alias, id] of variableMap) {
+      const tracker = this.getTrackerMeta(id).tracker;
+
+      if (tracker.isVector) {
+        const components = tracker.components!;
+
+        scope[alias] = {
+          x: components.x.get(),
+          y: components.y.get(),
+          valueOf: () =>
+            axis === "y" ? components.y.get() : components.x.get(),
+        };
+      } else {
+        scope[alias] = tracker.get();
+      }
+    }
+
+    const result = parsed.evaluate(scope);
+
+    if (typeof result !== "number" || !Number.isFinite(result)) {
+      throw new Error(
+        `Tracker expression '${expressionText}' did not produce a finite number.`,
+      );
+    }
+
+    return result;
+  }
+
+  private writeExpressionValue(
+    rule: TrackerExpressionData,
+    value: { x: number; y: number },
+  ): void {
+    const target = this.getTrackerMeta(rule.target).tracker;
+
+    if (rule.targetComponent) {
+      target.components![rule.targetComponent].set(value.x);
       return;
     }
 
-    throw new Error(`Tracker connection '${id}' not found.`);
+    if (target.isVector) {
+      target.setVector({ x: value.x, y: value.y });
+      return;
+    }
+
+    target.set(value.x);
   }
+
+  private addGraphEdge(from: string, to: string): void {
+    const key = graphEdgeKey(from, to);
+    const uses = this.graphEdgeUses.get(key) ?? 0;
+
+    if (uses === 0) {
+      this.graph.addEdge(from, to);
+    }
+
+    this.graphEdgeUses.set(key, uses + 1);
+  }
+
+  private removeGraphEdge(from: string, to: string): void {
+    const key = graphEdgeKey(from, to);
+    const uses = this.graphEdgeUses.get(key) ?? 0;
+
+    if (uses <= 1) {
+      this.graphEdgeUses.delete(key);
+      this.graph.removeEdge(from, to);
+      return;
+    }
+
+    this.graphEdgeUses.set(key, uses - 1);
+  }
+
+  disconnectTrackers(id: string): void {
+    const rule = this.expressions.get(id);
+
+    if (!rule) {
+      throw new Error(`Tracker connection '${id}' not found.`);
+    }
+
+    for (const connection of rule.connections) {
+      connection.disconnect();
+    }
+
+    for (const dependency of rule.dependencies) {
+      for (const targetDependency of rule.targetDependencies) {
+        this.removeGraphEdge(dependency, targetDependency);
+      }
+    }
+
+    this.expressions.delete(id);
+    this.onConnectionsChanged.emit();
+  }
+
+  /** Incoming expression rules, optionally filtered to one tracker. */
+  getTrackerExpressions(targetId?: string): TrackerExpressionInfo[] {
+    return [...this.expressions.values()]
+      .filter((rule) => targetId === undefined || rule.target === targetId)
+      .map((rule) => ({
+        id: rule.id,
+        target: rule.target,
+        targetComponent: rule.targetComponent,
+        expression: rule.expressionText,
+        sources: [...rule.sourceIds],
+        variables: Object.fromEntries(rule.variableMap),
+        ...(rule.primarySource ? { from: rule.primarySource } : {}),
+      }));
+  }
+
+  /** Tracker names usable in expressions, after identifier sanitising. */
+  getExpressionVariables(): TrackerExpressionVariable[] {
+    return [...this.buildExpressionAliases().entries()].map(
+      ([name, tracker]) => ({
+        name,
+        trackerId: tracker.id,
+        isVector: tracker.isVector,
+      }),
+    );
+  }
+
   // exposing to UI
   getTrackerInfo() {
     return [...this.trackers.values()].filter(

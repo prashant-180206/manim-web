@@ -1,9 +1,21 @@
-import { Mobject } from "../mobject/mobect";
 import type { AnimationInput } from "./animationProvider";
 import { AnimationName } from "./animationName";
 
+/** Kind of object an animation can drive. */
+export type AnimationTargetType = "mobject" | "tracker";
+
+/**
+ * Anything that owns an `AnimationProvider` and can be a timeline target.
+ * `Mobject` and `Tracker` both implement this.
+ */
+export interface AnimationTarget {
+  readonly id: string;
+  name: string;
+  readonly animationTargetType: AnimationTargetType;
+}
+
 export interface AnimationOptions {
-  mobject: Mobject;
+  target: AnimationTarget;
   duration: number;
   onStart?: () => void;
   onUpdate: (progress: number) => void;
@@ -20,7 +32,7 @@ export class Animation {
   playing = false;
   completed = false;
   reversed = false;
-  target: Mobject;
+  target: AnimationTarget;
 
   private readonly onStart?;
   private readonly onUpdate;
@@ -35,7 +47,7 @@ export class Animation {
     this.onStart = options.onStart;
     this.onUpdate = options.onUpdate;
     this.onComplete = options.onComplete;
-    this.target = options.mobject;
+    this.target = options.target;
   }
 
   play(reverse = false) {

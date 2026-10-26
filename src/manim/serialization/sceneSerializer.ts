@@ -43,8 +43,12 @@ export interface SerializedMobject {
   children: SerializedMobject[];
 }
 
+export type SerializedAnimationTargetType = "mobject" | "tracker";
+
 export interface SerializedAnimation {
   targetId: string;
+  /** Missing on older v3 files, where every target was a mobject. */
+  targetType?: SerializedAnimationTargetType;
   name: AnimationName;
   start: number;
   duration: number;
@@ -81,9 +85,16 @@ export interface SerializedPropertyBinding {
 }
 
 export interface SerializedTrackerConnection {
-  from: string;
+  /** Legacy single source, exposed as `t` in the expression. */
+  from?: string;
   target: string;
+  /** Target channel; omitted or null writes the whole target. */
+  targetComponent?: "x" | "y" | null;
   expression: string;
+  /** Top-level source trackers, informational and validated on load. */
+  sources?: string[];
+  /** Expression alias → tracker id, so restore does not depend on names. */
+  variables?: Record<string, string>;
 }
 
 export interface SceneDocument {
@@ -193,6 +204,7 @@ function serializeAnimation(
 
   return {
     targetId: animation.target.id,
+    targetType: animation.target.animationTargetType,
     name: animation.name,
     start: scene.animationSystem.getStart(animation.id),
     duration: animation.duration,
@@ -252,12 +264,15 @@ export function serializeScene(
           : {}),
       })),
     ),
-    trackerConnections: trackers.flatMap((meta) =>
-      [...meta.trackerConnections.values()].map((connection) => ({
-        from: connection.from,
+    trackerConnections: scene.trackerSystem.getTrackerExpressions().map(
+      (connection) => ({
+        ...(connection.from ? { from: connection.from } : {}),
         target: connection.target,
-        expression: connection.expression.toString(),
-      })),
+        targetComponent: connection.targetComponent,
+        expression: connection.expression,
+        sources: [...connection.sources],
+        variables: { ...connection.variables },
+      }),
     ),
     timeline: {
       currentTime: scene.animationSystem.currentTime,
@@ -447,49 +462,8 @@ export function parseSceneDocument(input: unknown): SceneDocument {
     (mobject, index) => validateMobject(mobject, `mobjects[${index}]`, ids),
   );
 
-  const animations = expectArray(data.animations, "animations").map(
-    (value, index) => {
-      const label = `animations[${index}]`;
-
-      if (!isRecord(value)) fail(`${label} must be an object.`);
-
-      const name = expectString(value.name, `${label}.name`);
-      if (!animationNames.has(name)) {
-        fail(`${label}.name '${name}' is not a known animation.`);
-      }
-
-      const targetId = expectString(value.targetId, `${label}.targetId`);
-      if (!ids.has(targetId)) {
-        fail(`${label}.targetId '${targetId}' does not exist.`);
-      }
-
-      if (!isRecord(value.params)) {
-        fail(`${label}.params must be an object.`);
-      }
-
-      const easing = expectString(value.easing, `${label}.easing`);
-      if (!hasKey(Easing, easing)) {
-        fail(`${label}.easing '${easing}' is not a known easing.`);
-      }
-
-      const params: Record<string, SerializedValue> = {};
-
-      for (const [key, param] of Object.entries(value.params)) {
-        params[key] = validateValue(param, `${label}.params.${key}`);
-      }
-
-      return {
-        targetId,
-        name: name as AnimationName,
-        start: Math.max(0, expectNumber(value.start, `${label}.start`)),
-        duration: Math.max(0.0001, expectNumber(value.duration, `${label}.duration`)),
-        easing,
-        params,
-      };
-    },
-  );
-
   const trackerIds = new Set<string>();
+  const trackerComponentIds = new Set<string>();
   const trackers: SerializedTracker[] = expectArray(
     data.trackers,
     "trackers",
@@ -548,6 +522,7 @@ export function parseSceneDocument(input: unknown): SceneDocument {
         fail(`duplicate tracker id '${componentId}'.`);
       }
       trackerIds.add(componentId);
+      trackerComponentIds.add(componentId);
 
       return {
         id: componentId,
@@ -566,6 +541,78 @@ export function parseSceneDocument(input: unknown): SceneDocument {
       },
     };
   });
+
+  const animations = expectArray(data.animations, "animations").map(
+    (value, index) => {
+      const label = `animations[${index}]`;
+
+      if (!isRecord(value)) fail(`${label} must be an object.`);
+
+      const name = expectString(value.name, `${label}.name`);
+      if (!animationNames.has(name)) {
+        fail(`${label}.name '${name}' is not a known animation.`);
+      }
+
+      const targetId = expectString(value.targetId, `${label}.targetId`);
+
+      let targetType: SerializedAnimationTargetType;
+
+      if (value.targetType === undefined) {
+        // Older v3 files only targeted mobjects.
+        targetType = ids.has(targetId) ? "mobject" : "tracker";
+      } else {
+        const declared = expectString(
+          value.targetType,
+          `${label}.targetType`,
+        );
+
+        if (declared !== "mobject" && declared !== "tracker") {
+          fail(`${label}.targetType must be 'mobject' or 'tracker'.`);
+        }
+
+        targetType = declared;
+      }
+
+      const targetExists =
+        targetType === "mobject"
+          ? ids.has(targetId)
+          : trackerIds.has(targetId) && !trackerComponentIds.has(targetId);
+
+      if (!targetExists) {
+        fail(
+          `${label}.targetId '${targetId}' is not a known ${targetType}.`,
+        );
+      }
+
+      if (!isRecord(value.params)) {
+        fail(`${label}.params must be an object.`);
+      }
+
+      const easing = expectString(value.easing, `${label}.easing`);
+      if (!hasKey(Easing, easing)) {
+        fail(`${label}.easing '${easing}' is not a known easing.`);
+      }
+
+      const params: Record<string, SerializedValue> = {};
+
+      for (const [key, param] of Object.entries(value.params)) {
+        params[key] = validateValue(param, `${label}.params.${key}`);
+      }
+
+      return {
+        targetId,
+        targetType,
+        name: name as AnimationName,
+        start: Math.max(0, expectNumber(value.start, `${label}.start`)),
+        duration: Math.max(
+          0.0001,
+          expectNumber(value.duration, `${label}.duration`),
+        ),
+        easing,
+        params,
+      };
+    },
+  );
 
   const bindings = expectArray(data.bindings, "bindings").map(
     (value, index) => {
@@ -611,20 +658,87 @@ export function parseSceneDocument(input: unknown): SceneDocument {
 
     if (!isRecord(value)) fail(`${label} must be an object.`);
 
-    const from = expectString(value.from, `${label}.from`);
+    const from =
+      value.from === undefined
+        ? undefined
+        : expectString(value.from, `${label}.from`);
     const target = expectString(value.target, `${label}.target`);
 
-    if (!trackerIds.has(from)) {
+    if (from !== undefined && !trackerIds.has(from)) {
       fail(`${label}.from '${from}' does not exist.`);
     }
     if (!trackerIds.has(target)) {
       fail(`${label}.target '${target}' does not exist.`);
     }
 
+    let targetComponent: "x" | "y" | null | undefined = undefined;
+
+    if (value.targetComponent !== undefined) {
+      if (value.targetComponent === null) {
+        targetComponent = null;
+      } else {
+        const component = expectString(
+          value.targetComponent,
+          `${label}.targetComponent`,
+        );
+
+        if (component !== "x" && component !== "y") {
+          fail(`${label}.targetComponent must be 'x', 'y' or null.`);
+        }
+
+        targetComponent = component;
+      }
+    }
+
+    let sources: string[] | undefined;
+
+    if (value.sources !== undefined) {
+      sources = expectArray(value.sources, `${label}.sources`).map(
+        (source, sourceIndex) => {
+          const id = expectString(
+            source,
+            `${label}.sources[${sourceIndex}]`,
+          );
+
+          if (!trackerIds.has(id)) {
+            fail(`${label}.sources[${sourceIndex}] '${id}' does not exist.`);
+          }
+
+          return id;
+        },
+      );
+    }
+
+    let variables: Record<string, string> | undefined;
+
+    if (value.variables !== undefined) {
+      if (!isRecord(value.variables)) {
+        fail(`${label}.variables must be an object.`);
+      }
+
+      variables = {};
+
+      for (const [alias, idValue] of Object.entries(value.variables)) {
+        const id = expectString(
+          idValue,
+          `${label}.variables.${alias}`,
+        );
+
+        if (!trackerIds.has(id)) {
+          fail(`${label}.variables.${alias} '${id}' does not exist.`);
+        }
+
+        variables[alias] = id;
+      }
+    }
+
     return {
-      from,
+      ...(from !== undefined ? { from } : {}),
       target,
+      ...(targetComponent !== undefined ? { targetComponent } : {}),
       expression: expectString(value.expression, `${label}.expression`),
+      ...(sources !== undefined ? { sources } : {}),
+      ...(variables !== undefined ? { variables } : {}),
     };
   });
 
@@ -1003,21 +1117,6 @@ export function applyScene(
 
     restoreNodes(document.mobjects, null);
 
-    for (const data of document.animations) {
-      const target = mobjects.get(data.targetId);
-
-      if (!target) {
-        fail(`animation target '${data.targetId}' was not restored.`);
-      }
-
-      const animation = target.animations.create(
-        data.name,
-        deserializeAnimationInput(data),
-      );
-
-      scene.animationSystem.restore(animation, data.start);
-    }
-
     for (const tracker of document.trackers) {
       if (tracker.kind === "vector" && tracker.components) {
         scene.trackerSystem.restoreVectorTracker(
@@ -1042,6 +1141,25 @@ export function applyScene(
       );
     }
 
+    for (const data of document.animations) {
+      const targetType = data.targetType ?? "mobject";
+      const target =
+        targetType === "tracker"
+          ? scene.trackerSystem.findTracker(data.targetId)
+          : mobjects.get(data.targetId);
+
+      if (!target) {
+        fail(`animation target '${data.targetId}' was not restored.`);
+      }
+
+      const animation = target.animations.create(
+        data.name,
+        deserializeAnimationInput(data),
+      );
+
+      scene.animationSystem.restore(animation, data.start);
+    }
+
     for (const binding of document.bindings) {
       scene.trackerSystem.restorePropertyConnection(
         binding.trackerId,
@@ -1053,11 +1171,13 @@ export function applyScene(
     }
 
     for (const connection of document.trackerConnections) {
-      scene.trackerSystem.restoreTrackerConnection(
-        connection.from,
-        connection.target,
-        connection.expression,
-      );
+      scene.trackerSystem.restoreTrackerConnection({
+        from: connection.from,
+        target: connection.target,
+        expression: connection.expression,
+        targetComponent: connection.targetComponent ?? null,
+        variables: connection.variables,
+      });
     }
 
     scene.animationSystem.setCurrentTime(document.timeline.currentTime);

@@ -277,7 +277,9 @@ export function TimelinePanel() {
                           {animation.target.name}
                         </div>
                         <div className="truncate text-[10px] text-muted-foreground">
-                          {animation.name}
+                          {animation.targetType === "tracker"
+                            ? `tracker · ${animation.name}`
+                            : animation.name}
                         </div>
                       </div>
                     </div>

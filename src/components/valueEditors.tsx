@@ -289,8 +289,10 @@ function RangeValueEditor({ value, onChange }: ValueEditorProps<Range>) {
 
 function VectorValueEditor({ value, onChange }: ValueEditorProps<Vector>) {
   const current = value.get();
+  const hasZ = typeof (current as { z?: number }).z === "number";
+  const z = (current as { z?: number }).z ?? 0;
 
-  const updateVector = (patch: Partial<Vector>) => {
+  const updateVector = (patch: Partial<Vector> & { z?: number }) => {
     value.set({ ...value.get(), ...patch });
     onChange?.();
   };
@@ -298,7 +300,7 @@ function VectorValueEditor({ value, onChange }: ValueEditorProps<Vector>) {
   return (
     <PopoverField
       triggerLabel="Vector"
-      triggerValue={`${current.x}, ${current.y}`}
+      triggerValue={hasZ ? `${current.x}, ${current.y}, ${z}` : `${current.x}, ${current.y}`}
     >
       <div className="grid gap-3">
         <NumberStepperField
@@ -311,6 +313,13 @@ function VectorValueEditor({ value, onChange }: ValueEditorProps<Vector>) {
           value={current.y}
           onChange={(next) => updateVector({ y: next })}
         />
+        {hasZ && (
+          <NumberStepperField
+            label="Z"
+            value={z}
+            onChange={(next) => updateVector({ z: next })}
+          />
+        )}
       </div>
     </PopoverField>
   );

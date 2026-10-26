@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Signal } from "@/manim/events/signal";
 import { Camera3D } from "./camera3d";
 import { Mobject3DManager } from "./mobject/helpers/mobject3dManager";
+import { Selection3D } from "./utils/selection3d";
 
 /*
 |--------------------------------------------------------------------------
@@ -9,11 +10,11 @@ import { Mobject3DManager } from "./mobject/helpers/mobject3dManager";
 |--------------------------------------------------------------------------
 |
 | 3D counterpart of `src/manim/scene.ts`. It owns the renderer, the three.js
-| scene graph and the render loop, but takes an existing canvas exactly like
-| the 2D scene so the future editor wiring can reuse `SceneCanvas` patterns.
+| scene graph and the render loop, and takes an existing canvas exactly like
+| the 2D scene so the editor can reuse the `SceneCanvas` mounting pattern.
 |
-| Deliberately not implemented yet: input/raycasting, selection, loading a
-| scene document, animation system, tracker system, OrbitControls.
+| Deliberately not implemented yet: animation system, tracker system,
+| grouping, OrbitControls.
 |
 */
 
@@ -40,6 +41,8 @@ export class Scene3D {
   readonly camera: Camera3D;
 
   readonly mobjectManager: Mobject3DManager;
+
+  readonly selection: Selection3D;
 
   /** Emitted after each `update(dt)`, before the frame is rendered. */
   readonly onUpdate = new Signal<[number]>();
@@ -83,6 +86,11 @@ export class Scene3D {
     this.mobjectManager = new Mobject3DManager();
     this.scene.add(this.mobjectManager.root);
 
+    this.selection = new Selection3D(this);
+    this.mobjectManager.onRemove.connect((mobject) =>
+      this.selection.forget(mobject),
+    );
+
     this.lightRig.name = "light-rig-3d";
     this.scene.add(this.lightRig);
     this.setupLights();
@@ -105,6 +113,8 @@ export class Scene3D {
       canvas.height || 1,
       options.pixelRatio ?? 1,
     );
+
+    this.initializeInput();
   }
 
   get isRunning(): boolean {
@@ -114,6 +124,22 @@ export class Scene3D {
   get isDisposed(): boolean {
     return this.disposed;
   }
+
+  private initializeInput(): void {
+    this.canvas.addEventListener("pointerdown", this.onPointerDown);
+  }
+
+  private onPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+
+    // Shift/Ctrl/Cmd-click extends the current selection instead of replacing
+    // it, matching the 2D canvas and the scene/layers panels.
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      this.selection.multiselectAt(event.clientX, event.clientY);
+    } else {
+      this.selection.selectAt(event.clientX, event.clientY);
+    }
+  };
 
   private setupLights(): void {
     const ambient = new THREE.HemisphereLight(0xc7d7ff, 0x2b2f3a, 1.1);
@@ -196,6 +222,7 @@ export class Scene3D {
 
   /** Remove every mobject, keeping the renderer and lights alive. */
   clear(): void {
+    this.selection.clear();
     this.mobjectManager.clear();
     this.render();
   }
@@ -206,10 +233,12 @@ export class Scene3D {
     this.disposed = true;
 
     this.stop();
+    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.timer.disconnect();
     this.timer.dispose();
     this.onUpdate.clear();
 
+    this.selection.dispose();
     this.mobjectManager.dispose();
 
     this.scene.remove(this.lightRig);

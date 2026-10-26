@@ -1,5 +1,4 @@
-import { Animation } from "./animation";
-import { Mobject } from "../mobject/mobect";
+import { Animation, type AnimationTarget } from "./animation";
 import { Value, Values, ValueType } from "../utils/value";
 import { Easing, EasingFunction } from "../utils/easing";
 import { AnimationName } from "./animationName";
@@ -11,16 +10,18 @@ export interface AnimationInput {
   [key: string]: Value<boolean | number | Vector | ((t: number) => number)>;
 }
 
-interface AnimationFactory {
-  getAnimation: (mob: Mobject, obj: AnimationInput) => Animation;
+interface AnimationFactory<T extends AnimationTarget> {
+  getAnimation: (target: T, obj: AnimationInput) => Animation;
   requiredParams: { [key: string]: ValueType };
 }
 
-export class AnimationProvider {
-  private readonly animations = new Map<AnimationName, AnimationFactory>();
+export class AnimationProvider<
+  T extends AnimationTarget = AnimationTarget,
+> {
+  private readonly animations = new Map<AnimationName, AnimationFactory<T>>();
   private idGenerator = new IdGenerator();
 
-  constructor(private readonly owner: Mobject) {}
+  constructor(private readonly owner: T) {}
 
   getUniqueId(name: AnimationName): string {
     // adds a unique id to the animation name to ensure that each animation instance has a unique identifier
@@ -28,7 +29,10 @@ export class AnimationProvider {
     return `${this.owner.id}-${name}-${id}`;
   }
 
-  register(name: AnimationName, factory: Omit<AnimationFactory, "id">): void {
+  register(
+    name: AnimationName,
+    factory: Omit<AnimationFactory<T>, "id">,
+  ): void {
     this.animations.set(name, factory);
   }
 
@@ -49,7 +53,7 @@ export class AnimationProvider {
   create(name: AnimationName, input: AnimationInput): Animation {
     const factory = this.animations.get(name);
     if (!factory) {
-      throw new Error(`Animation ${name} is not supported by this mobject.`);
+      throw new Error(`Animation ${name} is not supported by this target.`);
     }
     const { duration = Values.number(1), easing = Easing.linear, ...rest } =
       input;

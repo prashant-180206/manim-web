@@ -14,10 +14,11 @@ export abstract class Mobject {
   /** Registry kind used to rebuild the object from a saved scene. */
   readonly kind: MobjectName;
   name: string;
+  readonly animationTargetType = "mobject" as const;
 
   protected propertyController: PropertyController<BaseProperty>;
 
-  readonly animations = new AnimationProvider(this);
+  readonly animations = new AnimationProvider<Mobject>(this);
   readonly trackerConnector = new TrackerProvider(this);
 
   constructor(id: string, name: string) {

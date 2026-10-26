@@ -1,5 +1,6 @@
 import { AnimationName } from "../animation/animationName";
-import { AnimationInput } from "../animation/animationProvider";
+import type { AnimationInput } from "../animation/animationProvider";
+import type { AnimationTarget, AnimationTargetType } from "../animation/animation";
 import { Mobject } from "../mobject/mobect";
 import { Scene } from "../scene";
 import { ValueType } from "../utils/value";
@@ -9,6 +10,7 @@ import {
   FaExpand,
   FaRotateRight,
   FaShuffle,
+  FaWaveSquare,
 } from "react-icons/fa6";
 import { MdVisibility, MdVisibilityOff } from "react-icons/md";
 
@@ -30,7 +32,9 @@ export interface AnimationItemUIData {
   duration: number;
 
   selected: boolean;
-  target: Mobject;
+  target: AnimationTarget;
+  targetType: AnimationTargetType;
+  targetName: string;
 
   moveStart(start: number): void;
   remove(): void;
@@ -58,6 +62,7 @@ const AnimationIcons: Record<AnimationName, IconType> = {
   [AnimationName.FadeIn]: MdVisibility,
   [AnimationName.FadeOut]: MdVisibilityOff,
   [AnimationName.MoveTo]: FaArrowRight,
+  [AnimationName.TrackerTo]: FaWaveSquare,
   [AnimationName.Scale]: FaExpand,
   [AnimationName.Rotate]: FaRotateRight,
   [AnimationName.Transform]: FaShuffle,
@@ -72,9 +77,7 @@ export class AnimationUI {
       name: animation.name,
       requiredParameters: animation.requiredParameters,
       create: (input) => {
-        // The animation system adds animations to the current selection.
-        scene.selection.selectMobject(mobj);
-        scene.animationSystem.add(animation.name, input);
+        scene.animationSystem.addTo(mobj, animation.name, input);
       },
       icon: AnimationIcons[animation.name],
     }));
@@ -102,6 +105,8 @@ export class AnimationUI {
           duration: animation.duration,
           selected: true,
           target: animation.target,
+          targetType: animation.target.animationTargetType,
+          targetName: animation.target.name,
           moveStart: (time) => system.moveStart(animation.id, time),
           remove: () => system.remove(animation.id),
         };

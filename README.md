@@ -1,17 +1,20 @@
 # web-manim
 
 A browser-first, Manim-inspired animation editor built on a custom Canvas 2D
-scene engine. The app runs as a Vite web app and can also be shipped as a
-desktop app with Tauri 2.
+scene engine and a three.js 3D engine. The app runs as a Vite web app and can
+also be shipped as a desktop app with Tauri 2.
 
-The engine lives in [`src/manim`](./src/manim) and is intentionally
-framework-agnostic: React owns the editor shell and consumes the UI adapter
-classes in `src/manim/UI`.
+The engines live in [`src/manim`](./src/manim) (2D) and
+[`src/manim3d`](./src/manim3d) (3D) and are intentionally framework-agnostic:
+React owns the editor shells and consumes the UI adapter classes in
+`src/manim/UI` and `src/manim3d/UI`.
 
-> **Status:** the Scene Studio is usable end to end for creating, arranging,
+> **Status:** the 2D Scene Studio is usable end to end for creating, arranging,
 > inspecting, animating and saving mobjects. Canvas click-to-select and
 > modifier-click multi-selection are wired; dragging and marquee selection
-> still happen through the panels.
+> still happen through the panels. The 3D Studio at `/scene3d` can create,
+> select, inspect, transform, save/open and undo/redo spheres and boxes; 3D
+> animations, trackers and grouping are not implemented yet.
 
 For agent-oriented context, invariants and change recipes, see
 [`AGENTS.md`](./AGENTS.md).
@@ -33,10 +36,13 @@ For agent-oriented context, invariants and change recipes, see
   badges and drag-and-drop reordering/reparenting
 - **Inspector** panel: edit every property of the selected mobject, with unit
   hints and a "center in viewport" action
-- **Animations** panel: add, configure and remove `FadeIn`, `FadeOut` and
-  `MoveTo`
-- **Trackers** panel: create numeric or vector (`x`/`y`) trackers, bind
-  numeric/vector properties and connect numeric trackers through expressions
+- **Animations** panel: add, configure and remove `FadeIn`, `FadeOut`,
+  `MoveTo` and tracker `TrackerTo` animations
+- **Trackers** panel: create numeric or vector (`x`/`y`) trackers, edit their
+  values and connect trackers through expressions such as `tr1 = tr2 + tr3` or
+  `tr1.x = tr2.x * 2`
+- **Links** panel: pick a tracker, bind it to a mobject property and add
+  `TrackerTo` animations
 - **Timeline** and **Console** tabs in the bottom dock
 - JSON scene save/open/close, with `Ctrl+S` / `Ctrl+O` shortcuts
 - Snapshot-based undo/redo with `Ctrl+Z` / `Ctrl+Shift+Z`
@@ -44,6 +50,9 @@ For agent-oriented context, invariants and change recipes, see
   unit, high-DPI aware
 - Native color pickers for `color` and `strokeColor` properties
 - shadcn/ui + semantic design tokens, dark editor theme
+- **3D Studio** at `/scene3d`: separate provider/canvas/editor for three.js
+  scenes, with raycast click/modifier multi-selection, Scene/Inspector/Camera
+  panels, undo/redo and an independent `manim-web-scene3d` JSON format
 
 ## Routes
 
@@ -51,6 +60,7 @@ For agent-oriented context, invariants and change recipes, see
 | ------------- | --------------------------------------------------------------------------------------------- |
 | `/`           | Scene Studio editor                                                                           |
 | `/scene`      | Alias for the Scene Studio editor                                                             |
+| `/scene3d`    | 3D Studio editor (three.js): spheres and boxes, camera, save/open                             |
 | `/playground` | Legacy canvas playground: create mobjects and render them                                     |
 | `/values`     | Value-editor lab for every supported `ValueType`, including color                            |
 
@@ -90,7 +100,7 @@ pnpm tauri build  # package the desktop app
 | `←` / `→`        | Seek by 0.1 s (`Shift` = 1 s)       |
 | `Ctrl/Cmd + B`   | Toggle the sidebar                  |
 | `Ctrl/Cmd + J`   | Toggle the bottom panel             |
-| `1` … `5`        | Switch sidebar views                |
+| `1` … `6`        | Switch sidebar views                |
 | `?`              | Open the shortcut help overlay      |
 
 ## Coordinate system
@@ -198,12 +208,13 @@ A document contains:
 
 - mobject tree (id, kind, name, visibility, lock state, properties, children)
 - the **order** of roots and siblings, which is what preserves z-order
-- every animation with target id, start, duration, easing and params
+- every animation with target id/type, start, duration, easing and params
 - trackers and their values (vector trackers also store their x/y component ids
   and values)
 - tracker → property bindings (with expressions, plus an optional y expression
   for vector properties)
-- tracker → tracker connections (numeric trackers only)
+- tracker expression rules (target channel, RHS expression, optional legacy
+  `from`, source ids and alias → tracker-id mappings)
 - timeline current time
 - scene name and viewport size at save time
 
@@ -333,6 +344,12 @@ Implemented factories:
 
 - `FadeIn` / `FadeOut` — animate opacity
 - `MoveTo` — interpolate position
+- `TrackerTo` — interpolate a numeric tracker's value or both components of a
+  vector tracker
+
+Animations are not limited to mobjects: `AnimationTarget` covers both
+`Mobject` and `Tracker`, and both expose an `AnimationProvider`. The same
+timeline, serialization and playback code drives either target.
 
 `Scale`, `Rotate` and `Transform` exist in the `AnimationName` enum but are not
 implemented yet. Scene files still serialise the animation name so future
@@ -342,8 +359,8 @@ implementations can restore them.
 
 Trackers are named numeric values with a `changed` signal. `TrackerSystem`
 supports tracker creation/removal, property bindings through `expr-eval`,
-tracker-to-tracker connections, dependency-cycle detection and cleanup when a
-mobject is deleted.
+tracker-to-tracker expression rules, dependency-cycle detection and cleanup when
+a mobject is deleted.
 
 A **vector tracker** is presented as a single tracker with `x` and `y` children.
 Internally it owns two scalar component trackers, but only the parent appears in
@@ -351,8 +368,31 @@ the tracker list and serialized top-level tracker array. Binding a vector tracke
 to a vector property such as `position` or `scale` drives each axis with its own
 expression; the `yExpression` is optional and defaults to the x expression.
 Numeric trackers can also target vector properties (the same value feeds both
-axes), while vector trackers cannot target numeric properties or be used as
-tracker-link endpoints.
+axes), while vector trackers cannot target numeric properties.
+
+### Tracker expressions
+
+Every tracker-to-tracker link is an assignment rule for one target tracker (or
+one of its components). Expressions reference trackers by name and may use
+`.x` / `.y` for vector components:
+
+```text
+tr1     = tr2 + tr3        // whole vector target: component-wise arithmetic
+tr1.x   = tr2.x * 2        // one component channel
+tr1     = tr2.x + tr3      // numeric target from vector components
+tr1     = tr2 + 1          // numeric target or whole vector target
+```
+
+Rules are global, not tied to a single source, so a rule can depend on several
+trackers. A bare vector reference uses the axis currently being evaluated, which
+makes `tr1 = tr2 + tr3` component-wise for a vector target. Referencing a vector
+without `.x`/`.y` in a numeric or single-channel expression is rejected.
+
+Each rule stores the alias → tracker-id mapping used when it was created, so
+restoring a scene does not depend on tracker names. The legacy `from` field is
+still accepted and exposed as `t`; new rules do not need it. Deleting any tracker
+or component involved in a rule removes the rule, and cycles are rejected before
+the dependency edge is added.
 
 `TrackerProvider` registers `opacity`, `position` and `scale` for every
 mobject, plus kind-specific geometry connectors:
@@ -370,7 +410,8 @@ mobject, plus kind-specific geometry connectors:
 
 Bindings resolve through the mobject's connector factories, not a hard-coded
 property lookup, so aliases and range adapters work the same as normal values.
-Tracker-to-tracker links remain numeric-only.
+Tracker-to-tracker expressions support numeric and vector trackers; target the
+parent tracker and choose a whole-vector or single-component channel.
 
 ### Signals and UI adapters
 
@@ -382,7 +423,7 @@ and selection. Disconnecting is idempotent.
 
 - `MobjectUI` — creation palette, tree rows and pre-order `zIndex`
 - `AnimationUI` — animation creation, timeline and playback data
-- `TrackerUI` — tracker list, bindings and connection actions
+- `TrackerUI` — tracker list, bindings, tracker animations, expression actions
 
 ## React layer
 
@@ -418,16 +459,27 @@ src/
 │   │   └── *.ts                 # Circle, Polygon, Text, LatexText, shapes…
 │   ├── serialization/
 │   │   └── sceneSerializer.ts   # JSON format, validation, restore, migration
-│   ├── tracker/                 # Trackers, bindings and dependency graph
+│   ├── tracker/                 # Trackers, bindings, animations, dependency graph
 │   ├── UI/                      # Adapters that expose engine data to React
 │   └── utils/                   # Value types, units, easing, loop, selection
+├── manim3d/                     # three.js engine (framework-independent)
+│   ├── scene3d.ts               # Scene3D: renderer, lights, loop, input, selection
+│   ├── camera3d.ts              # 3D world ↔ screen framing
+│   ├── mobject/                 # Base mobject, sphere/box, manager, registry
+│   ├── serialization/           # manim-web-scene3d v1 format
+│   ├── UI/                      # 3D creation/tree adapter data
+│   └── utils/                   # 3D values, types, raycast selection
 ├── components/
 │   ├── ui/                      # shadcn/ui primitives
-│   ├── editor/                  # EditorShell, panels, actions, file helpers
+│   ├── editor/                  # 2D EditorShell, panels, actions, file helpers
+│   ├── editor3d/                # 3D EditorShell, panels, history, file helpers
 │   ├── valueEditors.tsx         # Editor for every ValueType
-│   └── SceneCanvas.tsx          # Mounts the shared scene canvas
-├── context/manimContext.tsx     # ManimProvider / useManim
-├── pages/                       # Scene Studio, playground and value lab
+│   ├── SceneCanvas.tsx          # Mounts the shared 2D scene canvas
+│   └── Scene3DCanvas.tsx        # Mounts the 3D WebGL canvas
+├── context/
+│   ├── manimContext.tsx         # ManimProvider / useManim
+│   └── scene3dContext.tsx       # Scene3DProvider / useScene3D
+├── pages/                       # Scene Studio, 3D Studio, playground, value lab
 ├── App.tsx                      # Routes
 └── main.tsx
 src-tauri/                       # Tauri 2 desktop shell (Rust)
@@ -447,13 +499,20 @@ chunk-size warning (the bundle is ~934 kB minified); it is not an error.
 
 ## Known limitations
 
-- **Canvas input is selection-only.** Click and modifier-click work, but there
-  is no drag, marquee, pan or zoom; use the Scene/Layers panels for arrangement.
+- **Canvas input is selection-only.** Click and modifier-click work in both the
+  2D and 3D editors, but there is no drag, marquee, pan or zoom; use the
+  Scene/Layers panels for 2D arrangement.
+- **The 3D editor is a first slice.** It has no grouping/layers, animations,
+  trackers, timeline, transform gizmos or OrbitControls, and its scene graph is
+  a flat root list.
+- **3D scenes use a separate file format.** `manim-web-scene3d` v1 stores the
+  camera and root mobjects; it is not interchangeable with `manim-web-scene` v3.
 - **No autosave or project browser.** Save downloads a JSON file and Open reads
   one back through a file input.
 - **`Scale`, `Rotate` and `Transform` animations are not implemented.**
-- **Tracker links are numeric-only.** Vector trackers can drive vector properties
-  but cannot be linked to another tracker; bind them directly instead.
+- **Tracker expression rules target the parent tracker.** Choose a whole-vector
+  or `.x`/`.y` channel in the Trackers panel; component trackers are not direct
+  link endpoints.
 - **Groups propagate position and opacity, not scale.** Child positions are
   relative to their group; `scale` on a group is currently ignored.
 - **Layers drag-and-drop uses HTML5 drag events**, so it is desktop-oriented.
@@ -467,7 +526,8 @@ chunk-size warning (the bundle is ~934 kB minified); it is not an error.
 
 1. Add canvas dragging, marquee selection and grouping (click selection is wired).
 2. Implement `Scale`, `Rotate` and `Transform` animations.
-3. Add vector tracker links and a richer tracker inspector.
+3. Add a richer tracker inspector and expression validation hints.
 4. Add autosave, recent scenes and native file dialogs.
 5. Add multi-object property editing.
 6. Replace the template Tauri command with real desktop integrations.
+7. Grow the 3D Studio: grouping/layers, OrbitControls, animations and trackers.

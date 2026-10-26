@@ -14,7 +14,7 @@ export class AnimationRegistry {
         return new Animation(
           id,
           {
-            mobject: mob,
+            target: mob,
             duration: input.duration.get(),
             onUpdate: (progress) => {
               const easedProgress = easing(progress);
@@ -32,7 +32,7 @@ export class AnimationRegistry {
         return new Animation(
           animationProvider.getUniqueId(AnimationName.FadeOut),
           {
-            mobject: mob,
+            target: mob,
             duration: input.duration.get(),
             onUpdate: (progress) => {
               const easedProgress = easing(progress);
@@ -56,7 +56,7 @@ export class AnimationRegistry {
         return new Animation(
           id,
           {
-            mobject: mob,
+            target: mob,
             duration: input.duration.get(),
             onUpdate: (progress) => {
               const easing = input.easing.get();

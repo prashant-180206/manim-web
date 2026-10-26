@@ -6,6 +6,8 @@
 
 import { Signal } from "../events/signal";
 import { Scene } from "../scene";
+import type { Mobject } from "../mobject/mobect";
+import type { Tracker } from "../tracker/tracker";
 import { Animation } from "./animation";
 import { AnimationName } from "./animationName";
 import { AnimationInput } from "./animationProvider";
@@ -50,7 +52,17 @@ export class AnimationSystem {
     if (!mobj) {
       throw new Error("No mobject selected to add animation.");
     }
-    const animationInstance = mobj.animations.create(animation, input);
+
+    return this.addTo(mobj, animation, input);
+  }
+
+  /** Add an animation for a mobject or tracker target. */
+  addTo(
+    target: Mobject | Tracker,
+    animation: AnimationName,
+    input: AnimationInput,
+  ): string {
+    const animationInstance = target.animations.create(animation, input);
     this.animations.set(animationInstance.id, animationInstance);
     this.sequence.set(animationInstance.id, this.totalDuration);
     this.totalDuration += animationInstance.duration;
@@ -88,6 +100,11 @@ export class AnimationSystem {
   }
 
   removeMobject(id: string): void {
+    this.removeTarget(id);
+  }
+
+  /** Remove every animation whose target has this id. */
+  removeTarget(id: string): void {
     for (const animation of this.animations.values()) {
       if (animation.target.id === id) {
         this.remove(animation.id);
