@@ -1,5 +1,9 @@
 import {
   FaCircle,
+  FaCircleDot,
+  FaSlash,
+  FaEllipsis,
+  FaArrowRight,
   FaDrawPolygon,
   FaVectorSquare,
   FaShapes,
@@ -52,6 +56,10 @@ export interface MobjectTreeControlData {
 
 const MobjectIcons: Record<MobjectName, IconType> = {
   [MobjectName.Circle]: FaCircle,
+  [MobjectName.Point]: FaCircleDot,
+  [MobjectName.Line]: FaSlash,
+  [MobjectName.DottedLine]: FaEllipsis,
+  [MobjectName.ArrowVector]: FaArrowRight,
   [MobjectName.RegularPolygon]: FaDrawPolygon,
   [MobjectName.Polygon]: FaVectorSquare,
   [MobjectName.Plane]: FaTableCells,

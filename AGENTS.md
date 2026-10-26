@@ -57,7 +57,7 @@ EditorShell (src/components/editor/EditorShell.tsx)
 ├── renders one sidebar panel at a time
 ├── CanvasPane + SceneCanvas (mounts scene.canvas)
 ├── bottom tabs: Timeline / Console
-├── File menu: Save / Open / Close
+├── File menu: Save / Open / Close, Undo / Redo
 └── EditorContext = { scene, refresh(), log() }
 ```
 
@@ -75,9 +75,10 @@ EditorShell (src/components/editor/EditorShell.tsx)
 | `src/components/editor/LayersPanel.tsx` | Front-to-back tree, DnD and arrange actions |
 | `src/components/editor/InspectorPanel.tsx` | Property editing, unit hints, center action |
 | `src/components/editor/AnimationsPanel.tsx` | Animation creation/removal |
-| `src/components/editor/TrackersPanel.tsx` | Tracker creation, bindings, connections |
+| `src/components/editor/TrackersPanel.tsx` | Tracker creation (number/vector), bindings, connections |
 | `src/components/editor/TimelinePanel.tsx` | Playback and timeline scrubbing |
 | `src/components/editor/ConsolePanel.tsx` | Log display |
+| `src/components/editor/sceneHistory.ts` | Snapshot-based undo/redo for editor mutations |
 | `src/manim/scene.ts` | Canvas/camera ownership, render loop, tree rendering |
 | `src/manim/camera.ts` | **Only** world↔pixel conversion point |
 | `src/manim/utils/units.ts` | `PIXELS_PER_UNIT = 50`, conversion helpers, unit rules |
@@ -87,7 +88,10 @@ EditorShell (src/components/editor/EditorShell.tsx)
 | `src/manim/mobject/helpers/mobjectmanager.ts` | Tree mutation, grouping, restore, z-order APIs |
 | `src/manim/mobject/helpers/MobjectTree.ts` | `MobjectNode`, `roots` order, parent/children |
 | `src/manim/mobject/helpers/mobjectregistry.ts` | Constructs mobjects by `MobjectName` |
-| `src/manim/serialization/sceneSerializer.ts` | Format v2, validation, restore, v1 migration |
+| `src/manim/serialization/sceneSerializer.ts` | Format v3, validation, restore, v1/v2 migration |
+| `src/manim/tracker/tracker.ts` | Scalar tracker plus vector parent/component model |
+| `src/manim/tracker/trackerSystem.ts` | Tracker registry, bindings, links, vector channel routing |
+| `src/manim/UI/trackerUI.ts` | Tracker UI data, vector creation and binding adapters |
 | `src/manim/UI/mobjectUI.ts` | Tree UI data and pre-order `zIndex` |
 | `src/manim/utils/value.ts` | `Value<T>`, `ValueType`, `Values` factories |
 | `src/components/valueEditors.tsx` | Editor per `ValueType`, including color picker |
@@ -109,8 +113,11 @@ If the provider's canvas is not mounted, the scene still renders offscreen.
   draws the tree in world units.
 - Mobject geometry (`position`, `radius`, `width`, `height`, `vertices`, and
   any new geometry property) is expressed in **world units**.
-- `Mobject.contains(x, y)` receives world coordinates. Call
-  `this.worldToLocal(x, y)` before local hit testing.
+- `position` is relative to the parent group; root objects are relative to the
+  world origin. Rendering and hit testing must account for the ancestor chain.
+- `Mobject.contains(x, y)` receives coordinates in the parent's space. Call
+  `this.worldToLocal(x, y)` before local hit testing. `SelectionManager`
+  converts the world click point into the node's parent space first.
 - Do not manually add `scene.width / 2` / `scene.height / 2` to positions.
   New objects spawn at the world origin (`{ x: 0, y: 0 }`).
 
@@ -159,20 +166,21 @@ There is **no `zIndex` field on mobjects or nodes**.
 
 Reject drops onto self or descendants (`isDescendantOf`).
 
-### 7. Scene file format v2
+### 7. Scene file format v3
 
-`SCENE_FILE_FORMAT = "manim-web-scene"`, `SCENE_FILE_VERSION = 2`.
+`SCENE_FILE_FORMAT = "manim-web-scene"`, `SCENE_FILE_VERSION = 3`.
 
 The document covers the mobject tree (including order, ids, visibility, lock,
-all properties), animations, trackers, property bindings, tracker connections
-and timeline time. Serialization order preserves z-order and ids preserve
-animation/tracker targets.
+all properties), animations, trackers (including vector component ids/values),
+property bindings (including optional per-axis `yExpression`), tracker
+connections and timeline time. Serialization order preserves z-order and ids
+preserve animation/tracker targets.
 
 Public API:
 
 ```ts
 serializeScene(scene, name)     // → SceneDocument
-parseSceneDocument(input)       // validates, migrates v1 → v2
+parseSceneDocument(input)       // validates, migrates v1/v2 → v3
 applyScene(scene, document)     // clears then restores; throws on failure
 clearScene(scene)               // removes all mobjects, animations, trackers
 ```
@@ -183,9 +191,29 @@ Rules:
 - If restore fails, `applyScene` must leave the scene empty, not half-built.
 - When adding a mobject property or animation param, update serialization and
   the v1/v2 migration logic if the unit semantics differ.
+- V3 stores child positions relative to their parent group; v1/v2 files store
+  world positions and are converted during parsing.
 - Bump `SCENE_FILE_VERSION` for incompatible changes and add a migration path.
 
-### 8. Reactive UI updates after mutations
+### 8. Vector trackers
+
+- A vector tracker is one public `Tracker` with `components.x` and
+  `components.y`. The children are real scalar `Tracker`s with their own ids.
+- Only the parent appears in `getTrackerInfo()`, `TrackerUI.getTrackers()` and
+  the serialized `trackers` array. Components stay registered in `TrackerSystem`
+  for dependency tracking but are internal to the editor.
+- `Tracker.set()` throws on a vector parent; use `setVector()` or a child's
+  `set()`. `rename()` keeps child names as `<parent>.x` / `<parent>.y`.
+- Bindings live on the parent. A vector-property binding stores one expression
+  per axis; `yExpression` defaults to the x expression. A numeric tracker bound
+  to a vector property feeds the same source value to both axes.
+- Vector trackers cannot bind numeric properties and cannot be tracker-link
+  endpoints; reject those cases with explicit errors.
+- Vector properties serialise with `kind: "vector"` and component ids/values,
+  plus optional `yExpression` on bindings.
+  `restoreVectorTracker()` must restore and reserve both component ids.
+
+### 9. Reactive UI updates after mutations
 
 Panels mutate the engine directly, then call `refresh()` from `useEditor()`.
 Engine signals are connected once in `EditorShell` and trigger refresh/logs.
@@ -196,7 +224,7 @@ Use `log(level, message)` from `useEditor()` for user-visible console output.
 During scene restore `suppressEngineLogs` avoids per-object noise; keep that
 behaviour.
 
-### 9. Styling conventions
+### 10. Styling conventions
 
 - Use shadcn/ui primitives from `src/components/ui`.
 - Use semantic design tokens (`bg-background`, `bg-sidebar`,
@@ -249,13 +277,19 @@ behaviour.
 - **Canvas pointer input is selection-only.** `Scene.initializeInput()` wires
   `pointerdown` for click and modifier-click selection. `InputManager` /
   `SceneEvents` are not wired; do not assume drag, marquee, pan or zoom works.
-- **No autosave/undo.** Save downloads JSON, Open uses a file input, Close
-  confirms only when the scene is non-empty.
+- **No autosave.** Save downloads JSON, Open uses a file input, Close confirms
+  only when the scene is non-empty. Undo/redo is snapshot-based and session-only
+  (`sceneHistory.ts`), and is reset when a scene is opened or closed.
 - **`Scale`, `Rotate`, `Transform` are enum-only.** No factory is registered.
-- **Vector tracker bindings are unsupported.** The binding API accepts numeric
-  targets (`opacity`), not `position`/`scale`.
-- **Groups are structural.** `Group.render()` is empty and children are not
-  transformed by the group. Grouping changes the tree, not the visual transform.
+- **Tracker links are numeric-only.** Vector trackers bind directly to
+  `position`/`scale`; they cannot be link sources or targets. Bindings target the
+  parent tracker, never a component.
+- **Groups propagate position and opacity.** Child positions are stored
+  relative to their parent group, so moving a group moves its subtree and group
+  opacity multiplies child opacity. `Group.render()` stays empty because the
+  scene applies the transform while traversing children.
+- **Group scale is not inherited.** Only position and opacity flow down; child
+  stroke widths and font sizes stay in CSS pixels.
 - **Z-order is relative to the parent.** Reparenting changes which siblings an
   object is compared against.
 - **`pnpm build` warning** about >500 kB chunks is expected.
@@ -272,8 +306,12 @@ behaviour.
 - [ ] `pnpm exec tsc --noEmit` passes.
 - [ ] `pnpm build` passes (chunk-size warning is fine).
 - [ ] New geometry is in world units; stroke widths/font sizes are CSS pixels.
+- [ ] Reparenting keeps child positions stable by converting between parent and
+      world space.
 - [ ] New colors use `Values.color` and appear as color pickers.
 - [ ] Ordering changes go through `MobjectManager` and keep group children synced.
 - [ ] New persisted state is added to `SceneDocument` + validation + restore.
+- [ ] Vector tracker changes preserve parent/component ids, bindings and both
+      axis expressions across save/restore.
 - [ ] Panels call `refresh()` after mutating engine state.
 - [ ] `git status` shows only intended changes.

@@ -1,6 +1,7 @@
 import { Signal } from "../../events/signal";
 import { Group } from "../group";
 import { Mobject } from "../mobect";
+import type { Vector } from "../../utils/types";
 import { MobjectName } from "./mobjectName";
 import { MobjectRegistry } from "./mobjectregistry";
 import { MobjectNode, MobjectTree } from "./MobjectTree";
@@ -72,6 +73,7 @@ export class MobjectManager {
       node.parent = groupNode;
       groupNode.children.push(node);
       group.children.push(object);
+      this.toLocalPosition(node, groupNode);
     }
 
     this.tree.roots.push(groupNode);
@@ -101,6 +103,7 @@ export class MobjectManager {
       node.parent = groupNode;
       groupNode.children.push(node);
       (groupNode.mobject as Group).children.push(object);
+      this.toLocalPosition(node, groupNode);
     }
 
     // The group may already be attached somewhere; only root groups need to
@@ -114,8 +117,62 @@ export class MobjectManager {
     return groupNode.mobject as Group;
   }
 
+  /**
+   * Sum of the local positions of a parent chain, excluding the node itself.
+   * This is the world position of the space a child is authored in.
+   */
+  private parentWorldPosition(parent: MobjectNode | null): Vector {
+    let x = 0;
+    let y = 0;
+    let current = parent;
+
+    while (current) {
+      const position = current.mobject.properties.position.get();
+      x += position.x;
+      y += position.y;
+      current = current.parent;
+    }
+
+    return { x, y };
+  }
+
+  /** Rewrite a node's position from parent-relative to world space. */
+  private toWorldPosition(node: MobjectNode): void {
+    if (!node.parent) return;
+
+    const offset = this.parentWorldPosition(node.parent);
+    const position = node.mobject.properties.position;
+    const current = position.get();
+
+    position.set({ x: current.x + offset.x, y: current.y + offset.y });
+  }
+
+  /** Rewrite a node's position from world space to `parent`-relative space. */
+  private toLocalPosition(
+    node: MobjectNode,
+    parent: MobjectNode | null,
+  ): void {
+    if (!parent) return;
+
+    const offset = this.parentWorldPosition(parent);
+    const position = node.mobject.properties.position;
+    const current = position.get();
+
+    position.set({ x: current.x - offset.x, y: current.y - offset.y });
+  }
+
+  /** World position of the parent space in which `mobject` is authored. */
+  parentWorldPositionOf(mobject: Mobject): Vector {
+    return this.parentWorldPosition(this.getNode(mobject.id).parent);
+  }
+
   /** Remove a node from its current parent (or the root list). */
   private detach(node: MobjectNode): void {
+    // Children store positions relative to their parent. Convert to world
+    // coordinates before the parent link disappears so reattaching elsewhere
+    // does not move the object.
+    this.toWorldPosition(node);
+
     if (node.parent) {
       const siblings = node.parent.children;
       const index = siblings.indexOf(node);
@@ -154,6 +211,9 @@ export class MobjectManager {
         `Mobject '${object.id}' is not a child of group '${groupId}'.`,
       );
     }
+
+    // Convert the local position to world space before leaving the group.
+    this.toWorldPosition(node);
 
     // Remove from the group
     const index = groupNode.children.indexOf(node);
@@ -256,6 +316,7 @@ export class MobjectManager {
     }
 
     node.parent = parent;
+    this.toLocalPosition(node, parent);
 
     this.syncGroupChildren(oldParent);
     this.syncGroupChildren(parent);
@@ -299,6 +360,7 @@ export class MobjectManager {
 
     groupNode.children.splice(target, 0, node);
     node.parent = groupNode;
+    this.toLocalPosition(node, groupNode);
 
     this.syncGroupChildren(oldParent);
     this.syncGroupChildren(groupNode);
@@ -438,6 +500,20 @@ export class MobjectManager {
 
     if (!(node.mobject instanceof Group)) {
       throw new Error("Object is not a Group.");
+    }
+
+    // Children keep their visual position when promoted: their coordinates
+    // become relative to the group's parent (or the world for a root group).
+    const groupPosition = node.mobject.properties.position.get();
+
+    for (const child of node.children) {
+      const position = child.mobject.properties.position;
+      const current = position.get();
+
+      position.set({
+        x: current.x + groupPosition.x,
+        y: current.y + groupPosition.y,
+      });
     }
 
     if (node.parent) {

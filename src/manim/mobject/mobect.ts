@@ -54,12 +54,13 @@ export abstract class Mobject {
   abstract render(ctx: CanvasRenderingContext2D): void;
 
   /**
-   * Hit testing uses world coordinates, just like `position`. Subclasses work
-   * in their own local space, so this removes the object transform first.
+   * Hit testing receives coordinates in the parent's space, just like
+   * `position`. Subclasses work in their own local space, so this removes the
+   * object transform first.
    */
   abstract contains(x: number, y: number): boolean;
 
-  /** Convert a world-space point into this mobject's local space. */
+  /** Convert a parent-space point into this mobject's local space. */
   protected worldToLocal(x: number, y: number): Vector {
     const position = this.position;
     const scale = this.scale;
@@ -88,7 +89,9 @@ export abstract class Mobject {
   protected beginRender(ctx: CanvasRenderingContext2D) {
     const p = this.propertyController.properties as BaseProperty;
     ctx.save();
-    ctx.globalAlpha = p.opacity.get();
+    // Opacity is inherited: a child inside a faded group must fade with it.
+    const opacity = Math.max(0, Math.min(1, p.opacity.get()));
+    ctx.globalAlpha *= opacity;
     // The camera already maps units to pixels and puts the origin at the
     // viewport centre, so the base transform works directly in world units.
     const pos = p.position.get();

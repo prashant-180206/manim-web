@@ -1,5 +1,9 @@
 export enum MobjectName {
   Circle = "Circle",
+  Point = "Point",
+  Line = "Line",
+  DottedLine = "DottedLine",
+  ArrowVector = "ArrowVector",
   RegularPolygon = "RegularPolygon",
   Polygon = "Polygon",
   Plane = "Plane",

@@ -23,7 +23,7 @@ import type { Range, Vector } from "../utils/types";
 import { TrackerConnectionName } from "../tracker/trackerconnectorNames";
 
 export const SCENE_FILE_FORMAT = "manim-web-scene";
-export const SCENE_FILE_VERSION = 2;
+export const SCENE_FILE_VERSION = 3;
 
 /** Older files stored coordinates in pixels instead of world units. */
 const LEGACY_PIXELS_PER_UNIT = 50;
@@ -52,10 +52,23 @@ export interface SerializedAnimation {
   params: Record<string, SerializedValue>;
 }
 
+export type SerializedTrackerKind = "number" | "vector";
+
+export interface SerializedTrackerComponent {
+  id: string;
+  value: number;
+}
+
 export interface SerializedTracker {
   id: string;
   name: string;
   value: number;
+  kind?: SerializedTrackerKind;
+  /** x/y component trackers; present when `kind` is `"vector"`. */
+  components?: {
+    x: SerializedTrackerComponent;
+    y: SerializedTrackerComponent;
+  };
 }
 
 export interface SerializedPropertyBinding {
@@ -63,6 +76,8 @@ export interface SerializedPropertyBinding {
   mobjectId: string;
   property: TrackerConnectionName;
   expression: string;
+  /** Second expression when the bound property is a vector. */
+  yExpression?: string;
 }
 
 export interface SerializedTrackerConnection {
@@ -203,17 +218,38 @@ export function serializeScene(
     animations: [...scene.animationSystem.all()]
       .map((animation) => serializeAnimation(scene, animation))
       .sort((a, b) => a.start - b.start),
-    trackers: trackers.map((meta) => ({
-      id: meta.tracker.id,
-      name: meta.tracker.name,
-      value: meta.tracker.get(),
-    })),
+    trackers: trackers.map((meta) => {
+      const tracker = meta.tracker;
+      const components = tracker.components;
+
+      if (!components) {
+        return {
+          id: tracker.id,
+          name: tracker.name,
+          value: tracker.get(),
+        };
+      }
+
+      return {
+        id: tracker.id,
+        name: tracker.name,
+        value: 0,
+        kind: "vector" as const,
+        components: {
+          x: { id: components.x.id, value: components.x.get() },
+          y: { id: components.y.id, value: components.y.get() },
+        },
+      };
+    }),
     bindings: trackers.flatMap((meta) =>
       [...meta.propertyConnections.values()].map((connection) => ({
         trackerId: connection.trackerId,
         mobjectId: connection.mobjectId,
         property: connection.property,
         expression: connection.expression.toString(),
+        ...(connection.yExpression
+          ? { yExpression: connection.yExpression.toString() }
+          : {}),
       })),
     ),
     trackerConnections: trackers.flatMap((meta) =>
@@ -454,24 +490,82 @@ export function parseSceneDocument(input: unknown): SceneDocument {
   );
 
   const trackerIds = new Set<string>();
-  const trackers = expectArray(data.trackers, "trackers").map(
-    (value, index) => {
-      const label = `trackers[${index}]`;
+  const trackers: SerializedTracker[] = expectArray(
+    data.trackers,
+    "trackers",
+  ).map((value, index) => {
+    const label = `trackers[${index}]`;
 
-      if (!isRecord(value)) fail(`${label} must be an object.`);
+    if (!isRecord(value)) fail(`${label} must be an object.`);
 
-      const id = expectString(value.id, `${label}.id`);
+    const id = expectString(value.id, `${label}.id`);
 
-      if (trackerIds.has(id)) fail(`duplicate tracker id '${id}'.`);
-      trackerIds.add(id);
+    if (trackerIds.has(id)) fail(`duplicate tracker id '${id}'.`);
+    trackerIds.add(id);
+
+    const name = expectString(value.name, `${label}.name`);
+
+    const kind =
+      value.kind === undefined
+        ? "number"
+        : expectString(value.kind, `${label}.kind`);
+
+    if (kind !== "number" && kind !== "vector") {
+      fail(`${label}.kind must be 'number' or 'vector'.`);
+    }
+
+    if (kind === "number") {
+      if (value.components !== undefined) {
+        fail(`${label}.components is only valid for vector trackers.`);
+      }
 
       return {
         id,
-        name: expectString(value.name, `${label}.name`),
+        name,
         value: expectNumber(value.value, `${label}.value`),
       };
-    },
-  );
+    }
+
+    const componentsData = value.components;
+
+    if (!isRecord(componentsData)) {
+      fail(`${label}.components must be an object.`);
+    }
+
+    const readComponent = (
+      component: "x" | "y",
+    ): SerializedTrackerComponent => {
+      const componentLabel = `${label}.components.${component}`;
+      const raw = componentsData[component];
+
+      if (!isRecord(raw)) {
+        fail(`${componentLabel} must be an object.`);
+      }
+
+      const componentId = expectString(raw.id, `${componentLabel}.id`);
+
+      if (trackerIds.has(componentId)) {
+        fail(`duplicate tracker id '${componentId}'.`);
+      }
+      trackerIds.add(componentId);
+
+      return {
+        id: componentId,
+        value: expectNumber(raw.value, `${componentLabel}.value`),
+      };
+    };
+
+    return {
+      id,
+      name,
+      value: typeof value.value === "number" ? value.value : 0,
+      kind: "vector",
+      components: {
+        x: readComponent("x"),
+        y: readComponent("y"),
+      },
+    };
+  });
 
   const bindings = expectArray(data.bindings, "bindings").map(
     (value, index) => {
@@ -494,11 +588,17 @@ export function parseSceneDocument(input: unknown): SceneDocument {
         fail(`${label}.property '${property}' is not a known connector.`);
       }
 
+      const yExpression =
+        value.yExpression === undefined
+          ? undefined
+          : expectString(value.yExpression, `${label}.yExpression`);
+
       return {
         trackerId,
         mobjectId,
         property: property as TrackerConnectionName,
         expression: expectString(value.expression, `${label}.expression`),
+        ...(yExpression !== undefined ? { yExpression } : {}),
       };
     },
   );
@@ -555,7 +655,11 @@ export function parseSceneDocument(input: unknown): SceneDocument {
     },
   };
 
-  return version === 1 ? migrateSceneDocumentV1(document) : document;
+  return version === 1
+    ? migrateSceneDocumentV2(migrateSceneDocumentV1(document))
+    : version === 2
+      ? migrateSceneDocumentV2(document)
+      : document;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -668,6 +772,107 @@ function migrateSceneDocumentV1(document: SceneDocument): SceneDocument {
         }),
       ),
     })),
+  };
+}
+
+/** The vector value of a mobject's `position` property, if it has one. */
+function positionOf(mobject: SerializedMobject): Vector {
+  const property = mobject.properties.position;
+
+  return property?.type === ValueType.vector && isVector(property.value)
+    ? property.value
+    : { x: 0, y: 0 };
+}
+
+/**
+ * V2 files stored every position in world space. V3 stores child positions
+ * relative to their parent, so groups can move their subtree as one object.
+ */
+function migrateMobjectV2(
+  mobject: SerializedMobject,
+  parentWorld: Vector,
+): SerializedMobject {
+  const world = positionOf(mobject);
+  const property = mobject.properties.position;
+  const properties =
+    property?.type === ValueType.vector && isVector(property.value)
+      ? {
+          ...mobject.properties,
+          position: {
+            ...property,
+            value: {
+              x: world.x - parentWorld.x,
+              y: world.y - parentWorld.y,
+            },
+          },
+        }
+      : mobject.properties;
+
+  return {
+    ...mobject,
+    properties,
+    children: mobject.children.map((child) =>
+      migrateMobjectV2(child, world),
+    ),
+  };
+}
+
+/** Record the world position of every mobject's parent space in a v2 file. */
+function collectParentWorldPositions(
+  mobjects: SerializedMobject[],
+  parentWorld: Vector,
+  result: Map<string, Vector>,
+): void {
+  for (const mobject of mobjects) {
+    result.set(mobject.id, parentWorld);
+    collectParentWorldPositions(
+      mobject.children,
+      positionOf(mobject),
+      result,
+    );
+  }
+}
+
+function migrateSceneDocumentV2(document: SceneDocument): SceneDocument {
+  const parentWorld = new Map<string, Vector>();
+  collectParentWorldPositions(
+    document.mobjects,
+    { x: 0, y: 0 },
+    parentWorld,
+  );
+
+  return {
+    ...document,
+    mobjects: document.mobjects.map((mobject) =>
+      migrateMobjectV2(mobject, { x: 0, y: 0 }),
+    ),
+    // MoveTo positions in v2 files were world-space targets.
+    animations: document.animations.map((animation) => {
+      const property = animation.params.position;
+      const offset = parentWorld.get(animation.targetId);
+
+      if (
+        !offset ||
+        property?.type !== ValueType.vector ||
+        !isVector(property.value)
+      ) {
+        return animation;
+      }
+
+      return {
+        ...animation,
+        params: {
+          ...animation.params,
+          position: {
+            ...property,
+            value: {
+              x: property.value.x - offset.x,
+              y: property.value.y - offset.y,
+            },
+          },
+        },
+      };
+    }),
   };
 }
 
@@ -814,6 +1019,22 @@ export function applyScene(
     }
 
     for (const tracker of document.trackers) {
+      if (tracker.kind === "vector" && tracker.components) {
+        scene.trackerSystem.restoreVectorTracker(
+          tracker.id,
+          tracker.name,
+          {
+            x: tracker.components.x.value,
+            y: tracker.components.y.value,
+          },
+          {
+            x: tracker.components.x.id,
+            y: tracker.components.y.id,
+          },
+        );
+        continue;
+      }
+
       scene.trackerSystem.restoreTracker(
         tracker.id,
         tracker.name,
@@ -827,6 +1048,7 @@ export function applyScene(
         binding.mobjectId,
         binding.property,
         binding.expression,
+        binding.yExpression,
       );
     }
 

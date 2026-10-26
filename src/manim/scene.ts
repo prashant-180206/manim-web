@@ -198,6 +198,7 @@ export class Scene {
     // Clear in device space, then draw the whole scene in world units.
     this.camera.clear(this.ctx);
     this.camera.applyTransform(this.ctx);
+    this.ctx.globalAlpha = 1;
 
     for (const root of this.mobjectManager.tree.roots) {
       this.renderNode(root);
@@ -213,8 +214,24 @@ export class Scene {
 
     object.render(this.ctx);
 
-    for (const child of node.children) {
-      this.renderNode(child);
+    if (node.children.length > 0) {
+      const properties = object.properties;
+      const position = properties.position.get();
+
+      // Children are positioned relative to their parent. Group opacity is
+      // inherited by the subtree, while each child keeps its own opacity.
+      this.ctx.save();
+      this.ctx.translate(position.x, position.y);
+      this.ctx.globalAlpha *= Math.max(
+        0,
+        Math.min(1, properties.opacity.get()),
+      );
+
+      for (const child of node.children) {
+        this.renderNode(child);
+      }
+
+      this.ctx.restore();
     }
 
     this.ctx.restore();

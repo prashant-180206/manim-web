@@ -25,6 +25,8 @@ For agent-oriented context, invariants and change recipes, see
   and x/y axis labels
 - **PolarPlane** mobject with concentric circles, radial spokes, radius labels
   and angle labels
+- **Point**, **Line**, **DottedLine** and **ArrowVector** mobjects, with
+  optional point labels that show the name or position vector
 - **Scene** panel: create mobjects, rename, delete, group/ungroup, visibility
   and lock toggles
 - **Layers** panel: front-to-back mobject tree with grouped layers, draw-order
@@ -33,10 +35,11 @@ For agent-oriented context, invariants and change recipes, see
   hints and a "center in viewport" action
 - **Animations** panel: add, configure and remove `FadeIn`, `FadeOut` and
   `MoveTo`
-- **Trackers** panel: create trackers, bind numeric properties and connect
-  trackers through expressions
+- **Trackers** panel: create numeric or vector (`x`/`y`) trackers, bind
+  numeric/vector properties and connect numeric trackers through expressions
 - **Timeline** and **Console** tabs in the bottom dock
 - JSON scene save/open/close, with `Ctrl+S` / `Ctrl+O` shortcuts
+- Snapshot-based undo/redo with `Ctrl+Z` / `Ctrl+Shift+Z`
 - World-coordinate canvas: origin at the viewport centre, `+y` up, 50 px per
   unit, high-DPI aware
 - Native color pickers for `color` and `strokeColor` properties
@@ -146,6 +149,8 @@ There is **no separate `zIndex` property**. Draw order is the scene tree itself:
 - Rendering is a pre-order traversal of `mobjectManager.tree.roots`.
 - Within a parent, later siblings render in front of earlier siblings.
 - A group renders at its position in the tree; its children follow in order.
+  Child positions are stored relative to the group, and group opacity is
+  inherited by the subtree.
 - The `zN` badge in the Layers panel is derived from that pre-order position,
   not stored on the mobject.
 
@@ -186,7 +191,7 @@ reflected in the rows.
 the file format.
 
 - Format identifier: `manim-web-scene`
-- Current version: **2**
+- Current version: **3**
 - File extension: `.json`
 
 A document contains:
@@ -194,11 +199,16 @@ A document contains:
 - mobject tree (id, kind, name, visibility, lock state, properties, children)
 - the **order** of roots and siblings, which is what preserves z-order
 - every animation with target id, start, duration, easing and params
-- trackers and their values
-- tracker → property bindings (with expressions)
-- tracker → tracker connections
+- trackers and their values (vector trackers also store their x/y component ids
+  and values)
+- tracker → property bindings (with expressions, plus an optional y expression
+  for vector properties)
+- tracker → tracker connections (numeric trackers only)
 - timeline current time
 - scene name and viewport size at save time
+
+Version 3 stores group children in parent-relative coordinates. Older v1/v2
+files store world positions and are migrated on open.
 
 ### Public API
 
@@ -214,7 +224,7 @@ clearScene(scene): void
 leaves the scene empty rather than half-restored. `serializeScene` writes ids so
 animations, bindings and connections survive a round trip.
 
-### Version 1 migration
+### Version migration
 
 Version 1 files stored geometry in pixels. `parseSceneDocument` migrates them
 automatically:
@@ -224,6 +234,11 @@ automatically:
 - polygon `vertices` are divided by 50 and Y is flipped
 - `color` / `strokeColor` string values become `ValueType.color`
 - `strokeWidth` and `fontSize` remain CSS pixels
+
+Version 2 files stored every mobject position in world space. V3 stores child
+positions relative to their parent group, so v2 documents are converted by
+subtracting each parent's world position from its children (and from `MoveTo`
+targets).
 
 ### Save / open / close behaviour
 
@@ -267,6 +282,10 @@ Base properties are `opacity`, `position` and `scale`. Shapes add `color`,
 | Mobject           | Notes                                                   |
 | ----------------- | ------------------------------------------------------- |
 | `Circle`          | Radius, fill and stroke                                 |
+| `Point`           | Dot with an optional name or position-vector label      |
+| `Line`            | Segment between local `start` and `end` points          |
+| `DottedLine`      | Dashed segment with geometry-unit dash and gap lengths  |
+| `ArrowVector`     | Segment with a filled triangular head                   |
 | `RegularPolygon`  | Configurable width, height and number of sides          |
 | `Polygon`         | Arbitrary vertex list with point-in-polygon hit testing |
 | `Plane`           | Gridlines, axes and tick/axis labels with visibility toggles |
@@ -276,15 +295,22 @@ Base properties are `opacity`, `position` and `scale`. Shapes add `color`,
 | `ParametricShape` | Closed shape from four boundary expressions             |
 | `PolarShape`      | `r(theta)` sampled into a closed shape                  |
 | `LatexText`       | KaTeX expression rendered to an image                   |
-| `Group`           | Structural container; children keep their own transforms |
+| `Group`           | Container; children are group-relative and inherit opacity |
+
+`Point` labels are enabled with `showLabel`. When `labelAsPosition` is off the
+label shows the mobject name; when it is on the label shows the `position`
+vector. `labelOffset`, `labelColor` and `fontSize` control placement and
+styling, and the label stays screen-sized in CSS pixels.
 
 New mobjects are created through `MobjectRegistry` using the `MobjectName`
 enum. `MobjectManager` adds/restores them, generates collision-free ids, groups
 and ungroups, renames, deletes recursively, and emits add/remove/tree-change
 signals.
 
-`Group.render()` is intentionally empty: groups are structural, not
-transformable parents. The Scene still traverses and renders their children.
+`Group.render()` is intentionally empty: the scene applies the group's
+position and opacity while traversing its children, so the group itself has no
+geometry to draw. Child positions are stored relative to the group, and moving
+or fading a group moves or fades its whole subtree.
 
 ### Typed values
 
@@ -319,9 +345,18 @@ supports tracker creation/removal, property bindings through `expr-eval`,
 tracker-to-tracker connections, dependency-cycle detection and cleanup when a
 mobject is deleted.
 
-`TrackerProvider` exposes `opacity`, `position` and `scale` connectors. The
-binding API currently accepts **numeric** targets, so `opacity` works directly;
-vector bindings remain a known limitation.
+A **vector tracker** is presented as a single tracker with `x` and `y` children.
+Internally it owns two scalar component trackers, but only the parent appears in
+the tracker list and serialized top-level tracker array. Binding a vector tracker
+to a vector property such as `position` or `scale` drives each axis with its own
+expression; the `yExpression` is optional and defaults to the x expression.
+Numeric trackers can also target vector properties (the same value feeds both
+axes), while vector trackers cannot target numeric properties or be used as
+tracker-link endpoints.
+
+`TrackerProvider` exposes `opacity`, `position` and `scale` connectors, so both
+numeric and vector properties are bindable. Tracker-to-tracker links remain
+numeric-only.
 
 ### Signals and UI adapters
 
@@ -403,11 +438,13 @@ chunk-size warning (the bundle is ~934 kB minified); it is not an error.
 - **No autosave or project browser.** Save downloads a JSON file and Open reads
   one back through a file input.
 - **`Scale`, `Rotate` and `Transform` animations are not implemented.**
-- **Vector tracker bindings are not supported**; only numeric targets such as
-  `opacity` can be bound.
-- **Groups are structural.** Moving a group does not move its children.
+- **Tracker links are numeric-only.** Vector trackers can drive vector properties
+  but cannot be linked to another tracker; bind them directly instead.
+- **Groups propagate position and opacity, not scale.** Child positions are
+  relative to their group; `scale` on a group is currently ignored.
 - **Layers drag-and-drop uses HTML5 drag events**, so it is desktop-oriented.
-- **No undo/redo.**
+- **Undo/redo is snapshot-based and session-only.** It is not persisted with the
+  scene and is reset when a scene is opened or closed.
 - **The Rust/Tauri side is still the default template** (`greet` command only).
 - **Z-order is local to a parent.** Moving an object across parents changes
   where it appears relative to that parent's children.
@@ -416,7 +453,7 @@ chunk-size warning (the bundle is ~934 kB minified); it is not an error.
 
 1. Add canvas dragging, marquee selection and grouping (click selection is wired).
 2. Implement `Scale`, `Rotate` and `Transform` animations.
-3. Add numeric/vector tracker connectors and a tracker inspector.
+3. Add vector tracker links and a richer tracker inspector.
 4. Add autosave, recent scenes and native file dialogs.
-5. Add undo/redo and multi-object property editing.
+5. Add multi-object property editing.
 6. Replace the template Tauri command with real desktop integrations.

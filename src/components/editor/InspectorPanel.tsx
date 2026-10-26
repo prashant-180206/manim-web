@@ -46,7 +46,14 @@ function unitHint(key: string): string | null {
     key === "gridStep" ||
     key === "labelStep" ||
     key === "radialStep" ||
-    key === "vertices"
+    key === "vertices" ||
+    key === "start" ||
+    key === "end" ||
+    key === "labelOffset" ||
+    key === "dashLength" ||
+    key === "gapLength" ||
+    key === "headLength" ||
+    key === "headWidth"
   ) {
     return "units";
   }
@@ -223,9 +230,14 @@ export function InspectorPanel() {
               size="xs"
               className="w-full"
               onClick={() => {
+                // A grouped mobject is positioned relative to its parent, so
+                // centring means bringing its world origin to the viewport.
+                const offset = scene.mobjectManager.parentWorldPositionOf(
+                  mobject,
+                );
                 mobject.properties.position.set({
-                  x: 0,
-                  y: 0,
+                  x: -offset.x,
+                  y: -offset.y,
                 });
                 refresh();
               }}

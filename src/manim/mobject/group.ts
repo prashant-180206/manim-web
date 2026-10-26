@@ -13,8 +13,12 @@ export class Group extends Mobject {
     }
   }
   contains(x: number, y: number): boolean {
+    // Children are positioned relative to this group, so convert the
+    // parent-space point into group space before testing them.
+    const point = this.worldToLocal(x, y);
+
     for (const child of this.children) {
-      if (child.contains(x, y)) {
+      if (child.contains(point.x, point.y)) {
         return true;
       }
     }

@@ -39,12 +39,61 @@ export class SelectionManager {
   }
 
   /**
+   * Opacity after multiplying every ancestor's opacity. A fully transparent
+   * group makes its whole subtree invisible to hit testing.
+   */
+  private effectiveOpacity(node: MobjectNode): number {
+    let opacity = 1;
+    let current: MobjectNode | null = node;
+
+    while (current) {
+      opacity *= Math.max(
+        0,
+        Math.min(1, current.mobject.properties.opacity.get()),
+      );
+
+      if (opacity <= 0) return 0;
+
+      current = current.parent;
+    }
+
+    return opacity;
+  }
+
+  /**
+   * Convert a world point into the node's parent-relative coordinate space,
+   * where `Mobject.contains` expects its input.
+   */
+  private toNodeSpace(node: MobjectNode, point: Vector): Vector {
+    const ancestors: MobjectNode[] = [];
+    let parent = node.parent;
+
+    while (parent) {
+      ancestors.push(parent);
+      parent = parent.parent;
+    }
+
+    let result = point;
+
+    for (let i = ancestors.length - 1; i >= 0; i -= 1) {
+      const position = ancestors[i].mobject.properties.position.get();
+      result = { x: result.x - position.x, y: result.y - position.y };
+    }
+
+    return result;
+  }
+
+  /**
    * Whether a node can be picked. Hidden and locked nodes, and their subtrees,
    * are skipped. Groups themselves are structural, so only their children are
    * tested for geometry and opacity.
    */
   private isNodeHit(node: MobjectNode, point: Vector): boolean {
     if (!node.visible || node.locked) return false;
+
+    // Fully transparent objects are invisible to the user, so they must not
+    // steal clicks from objects behind them. Group opacity is inherited.
+    if (this.effectiveOpacity(node) <= 0) return false;
 
     if (node.mobject instanceof Group) {
       for (let i = node.children.length - 1; i >= 0; i -= 1) {
@@ -56,11 +105,8 @@ export class SelectionManager {
       return false;
     }
 
-    // Fully transparent objects are invisible to the user, so they must not
-    // steal clicks from objects behind them.
-    if (node.mobject.properties.opacity.get() <= 0) return false;
-
-    return node.mobject.contains(point.x, point.y);
+    const local = this.toNodeSpace(node, point);
+    return node.mobject.contains(local.x, local.y);
   }
 
   /** Topmost node under the point, using front-to-back tree order. */

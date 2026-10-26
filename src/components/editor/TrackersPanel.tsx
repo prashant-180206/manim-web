@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { ValueType } from "@/manim/utils/value";
+import type { Vector } from "@/manim/utils/types";
 import { TrackerConnectionName } from "@/manim/tracker/trackerconnectorNames";
 import {
   TrackerUI,
@@ -50,6 +51,7 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
   const [propertyOverride, setPropertyOverride] =
     useState<TrackerConnectionName | null>(null);
   const [propertyExpression, setPropertyExpression] = useState("t");
+  const [propertyExpressionY, setPropertyExpressionY] = useState("t");
   const [targetOverride, setTargetOverride] = useState("");
   const [trackerExpression, setTrackerExpression] = useState("t");
 
@@ -57,11 +59,10 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
     setDraftName(tracker.name);
   }, [tracker.name]);
 
+  // Vector trackers can only drive vector properties; numeric trackers can
+  // drive either kind, producing the x and y components from expressions.
   const propertyOptions = TrackerUI.getPropertyOptions(mobject).filter(
-    (option) => option.valueType === ValueType.number,
-  );
-  const vectorOptions = TrackerUI.getPropertyOptions(mobject).filter(
-    (option) => option.valueType !== ValueType.number,
+    (option) => !tracker.isVector || option.valueType === ValueType.vector,
   );
 
   const property =
@@ -70,10 +71,15 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
       ? propertyOverride
       : (propertyOptions[0]?.name ?? null);
 
+  const propertyIsVector =
+    propertyOptions.find((option) => option.name === property)?.valueType ===
+    ValueType.vector;
+
   const otherTrackers = allTrackers.filter((item) => item.id !== tracker.id);
-  const targetId = otherTrackers.some((item) => item.id === targetOverride)
+  const linkableTrackers = otherTrackers.filter((item) => !item.isVector);
+  const targetId = linkableTrackers.some((item) => item.id === targetOverride)
     ? targetOverride
-    : (otherTrackers[0]?.id ?? "");
+    : (linkableTrackers[0]?.id ?? "");
 
   const trackerName = (id: string) =>
     allTrackers.find((item) => item.id === id)?.name ?? id;
@@ -106,6 +112,7 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
         tracker.id,
         property,
         propertyExpression,
+        propertyIsVector ? propertyExpressionY : undefined,
       );
       log(
         "success",
@@ -161,7 +168,9 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
           className="h-7 flex-1 rounded-md px-2 text-xs font-medium"
         />
         <Badge variant="secondary" className="h-5 font-mono">
-          {tracker.value.toFixed(2)}
+          {tracker.isVector && tracker.vector
+            ? `(${tracker.vector.x.toFixed(2)}, ${tracker.vector.y.toFixed(2)})`
+            : tracker.value.toFixed(2)}
         </Badge>
         <Button
           variant="ghost"
@@ -177,21 +186,46 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
       </div>
 
       <div className="space-y-3 p-2.5">
-        <div className="flex items-center gap-2">
-          <span className="flex-1 text-[11px] text-muted-foreground">
-            Value
-          </span>
-          <NumberInput
-            value={tracker.value}
-            step={0.1}
-            onCommit={(value) => {
-              tracker.setValue(value);
-              refresh();
-            }}
-            ariaLabel={`${tracker.name} value`}
-            className="w-28"
-          />
-        </div>
+        {tracker.isVector ? (
+          <div className="space-y-1">
+            {tracker.components.map((component) => (
+              <div
+                key={component.id}
+                className="flex items-center gap-2"
+              >
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+                  {component.name}
+                </span>
+                <NumberInput
+                  value={component.value}
+                  step={0.1}
+                  onCommit={(value) => {
+                    component.setValue(value);
+                    refresh();
+                  }}
+                  ariaLabel={`${component.name} value`}
+                  className="w-28"
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-[11px] text-muted-foreground">
+              Value
+            </span>
+            <NumberInput
+              value={tracker.value}
+              step={0.1}
+              onCommit={(value) => {
+                tracker.setValue(value);
+                refresh();
+              }}
+              ariaLabel={`${tracker.name} value`}
+              className="w-28"
+            />
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
@@ -217,7 +251,9 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
                     {mobjectName}.{connection.property}
                   </span>
                   <code className="shrink-0 text-[10px] text-muted-foreground">
-                    {connection.expression}
+                    {connection.yExpression
+                      ? `x: ${connection.expression} · y: ${connection.yExpression}`
+                      : connection.expression}
                   </code>
                   <Button
                     variant="ghost"
@@ -237,45 +273,65 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
 
           {!mobject ? (
             <p className="text-[10px] text-muted-foreground/80">
-              Select a mobject to bind a numeric property.
+              Select a mobject to bind a property.
             </p>
           ) : propertyOptions.length === 0 ? (
             <p className="text-[10px] text-muted-foreground/80">
-              {mobject.name} has no numeric properties to bind.
+              {tracker.isVector
+                ? `${mobject.name} has no vector properties to bind.`
+                : `${mobject.name} has no bindable properties.`}
             </p>
           ) : (
             <div className="space-y-1.5 rounded-md border border-border/50 p-2">
-              <div className="grid grid-cols-2 gap-1.5">
-                <Select
-                  value={property ?? ""}
-                  onValueChange={(value) => {
-                    if (typeof value === "string") {
-                      setPropertyOverride(value as TrackerConnectionName);
-                    }
-                  }}
-                >
-                  <SelectTrigger size="sm" className="h-7 w-full rounded-md">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {propertyOptions.map((option) => (
-                      <SelectItem key={option.name} value={option.name}>
-                        {option.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <Select
+                value={property ?? ""}
+                onValueChange={(value) => {
+                  if (typeof value === "string") {
+                    setPropertyOverride(value as TrackerConnectionName);
+                  }
+                }}
+              >
+                <SelectTrigger size="sm" className="h-7 w-full rounded-md">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyOptions.map((option) => (
+                    <SelectItem key={option.name} value={option.name}>
+                      {option.name}
+                      {option.valueType === ValueType.vector ? " (x, y)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
+              <div className="grid grid-cols-2 gap-1.5">
                 <Input
                   value={propertyExpression}
                   onChange={(event) =>
                     setPropertyExpression(event.target.value)
                   }
                   placeholder="t"
-                  aria-label="Property expression"
+                  aria-label={
+                    propertyIsVector
+                      ? "X component expression"
+                      : "Property expression"
+                  }
                   className="h-7 rounded-md px-2 font-mono text-xs"
                 />
+
+                {propertyIsVector && (
+                  <Input
+                    value={propertyExpressionY}
+                    onChange={(event) =>
+                      setPropertyExpressionY(event.target.value)
+                    }
+                    placeholder="t"
+                    aria-label="Y component expression"
+                    className="h-7 rounded-md px-2 font-mono text-xs"
+                  />
+                )}
               </div>
+
               <Button
                 variant="outline"
                 size="xs"
@@ -287,16 +343,25 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
                 {property ? `.${property}` : ""}
               </Button>
               <p className="text-[10px] leading-relaxed text-muted-foreground/80">
-                Expression receives the tracker value as <code>t</code>.
+                {propertyIsVector ? (
+                  tracker.isVector ? (
+                    <>
+                      The <code>x</code> and <code>y</code> expressions receive
+                      the matching component value as <code>t</code>.
+                    </>
+                  ) : (
+                    <>
+                      Both expressions receive the tracker value as{" "}
+                      <code>t</code>.
+                    </>
+                  )
+                ) : (
+                  <>
+                    Expression receives the tracker value as <code>t</code>.
+                  </>
+                )}
               </p>
             </div>
-          )}
-
-          {vectorOptions.length > 0 && (
-            <p className="text-[10px] leading-relaxed text-muted-foreground/80">
-              Vector properties ({vectorOptions.map((o) => o.name).join(", ")}){" "}
-              cannot be bound because the engine only supports numeric targets.
-            </p>
           )}
         </div>
 
@@ -336,9 +401,14 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
             ))
           )}
 
-          {otherTrackers.length === 0 ? (
+          {tracker.isVector ? (
+            <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+              Vector trackers drive vector properties through their x and y
+              components. Link numeric trackers to build them.
+            </p>
+          ) : linkableTrackers.length === 0 ? (
             <p className="text-[10px] text-muted-foreground/80">
-              Create another tracker to link them together.
+              Create another numeric tracker to link them together.
             </p>
           ) : (
             <div className="space-y-1.5 rounded-md border border-border/50 p-2">
@@ -355,7 +425,7 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {otherTrackers.map((item) => (
+                    {linkableTrackers.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.name}
                       </SelectItem>
@@ -393,7 +463,9 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
 export function TrackersPanel() {
   const { scene, log } = useEditor();
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<"number" | "vector">("number");
   const [value, setValue] = useState(0);
+  const [vectorValue, setVectorValue] = useState<Vector>({ x: 0, y: 0 });
 
   const trackers = TrackerUI.getTrackers(scene);
 
@@ -402,9 +474,15 @@ export function TrackersPanel() {
       name.trim() || `tracker_${trackers.length + 1}`;
 
     try {
-      TrackerUI.createTracker(scene, nextName, value);
+      if (kind === "vector") {
+        TrackerUI.createVectorTracker(scene, nextName, vectorValue);
+      } else {
+        TrackerUI.createTracker(scene, nextName, value);
+      }
+
       setName("");
       setValue(0);
+      setVectorValue({ x: 0, y: 0 });
     } catch (error) {
       log("error", formatErrorMessage(error));
     }
@@ -431,20 +509,65 @@ export function TrackersPanel() {
               placeholder="tracker name"
               className="h-7 rounded-md text-xs"
             />
-            <div className="flex items-center gap-2">
-              <span className="flex-1 text-[11px] text-muted-foreground">
-                Initial value
-              </span>
-              <NumberInput
-                value={value}
-                step={0.1}
-                onCommit={setValue}
-                ariaLabel="Initial tracker value"
-                className="w-28"
-              />
-            </div>
+
+            <Select
+              value={kind}
+              onValueChange={(next) => {
+                if (next === "number" || next === "vector") {
+                  setKind(next);
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="h-7 w-full rounded-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="number">Number</SelectItem>
+                <SelectItem value="vector">Vector (x, y)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {kind === "vector" ? (
+              <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                <span className="text-[11px] text-muted-foreground">x</span>
+                <NumberInput
+                  value={vectorValue.x}
+                  step={0.1}
+                  onCommit={(x) =>
+                    setVectorValue((current) => ({ ...current, x }))
+                  }
+                  ariaLabel="Initial vector x"
+                  className="w-full"
+                />
+                <span className="text-[11px] text-muted-foreground">y</span>
+                <NumberInput
+                  value={vectorValue.y}
+                  step={0.1}
+                  onCommit={(y) =>
+                    setVectorValue((current) => ({ ...current, y }))
+                  }
+                  ariaLabel="Initial vector y"
+                  className="w-full"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-[11px] text-muted-foreground">
+                  Initial value
+                </span>
+                <NumberInput
+                  value={value}
+                  step={0.1}
+                  onCommit={setValue}
+                  ariaLabel="Initial tracker value"
+                  className="w-28"
+                />
+              </div>
+            )}
+
             <Button size="xs" className="w-full" onClick={createTracker}>
-              <Plus /> Create tracker
+              <Plus /> Create{" "}
+              {kind === "vector" ? "vector tracker" : "tracker"}
             </Button>
           </div>
         </CollapsibleSection>
