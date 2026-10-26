@@ -31,6 +31,7 @@ export abstract class Mobject {
     });
     AnimationRegistry.registerBaseAnimations(this);
     TrackerConnectorRegistry.registerBaseConnectors(this);
+    TrackerConnectorRegistry.registerMobjectConnectors(this);
   }
 
   get properties(): BaseProperty {

@@ -43,6 +43,13 @@ interface TrackerCardProps {
   allTrackers: TrackerUIData[];
 }
 
+/** `gridStep` → `Grid Step`, `tMin` → `T Min`. */
+function formatConnectorName(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
 function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
   const { scene, refresh, log } = useEditor();
   const mobject = scene.selection.selectedMobject;
@@ -297,7 +304,7 @@ function TrackerCard({ tracker, allTrackers }: TrackerCardProps) {
                 <SelectContent>
                   {propertyOptions.map((option) => (
                     <SelectItem key={option.name} value={option.name}>
-                      {option.name}
+                      {formatConnectorName(option.name)}
                       {option.valueType === ValueType.vector ? " (x, y)" : ""}
                     </SelectItem>
                   ))}

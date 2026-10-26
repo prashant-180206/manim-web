@@ -1,7 +1,6 @@
 import { Scene } from "../scene";
 import { TrackerConnectionName } from "../tracker/trackerconnectorNames";
 import { Mobject } from "../mobject/mobect";
-import { BaseProperty } from "../mobject/helpers/proprertytypes";
 import { ValueType } from "../utils/value";
 import type { Vector } from "../utils/types";
 
@@ -73,10 +72,20 @@ export class TrackerUI {
   ): TrackerPropertyOptionUIData[] {
     if (!mobject) return [];
 
-    return mobject.trackerConnector.getConnectorNames().map((name) => ({
-      name,
-      valueType: mobject.getPropertyByName(name as keyof BaseProperty).type(),
-    }));
+    return mobject.trackerConnector
+      .getConnectorNames()
+      .map((name) => ({
+        name,
+        valueType: mobject.trackerConnector
+          .getConnectorFactory(name)
+          .getValue()
+          .type(),
+      }))
+      .filter(
+        (option) =>
+          option.valueType === ValueType.number ||
+          option.valueType === ValueType.vector,
+      );
   }
 
   static getTrackers(scene: Scene): TrackerUIData[] {

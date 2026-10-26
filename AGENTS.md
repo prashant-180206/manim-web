@@ -89,6 +89,9 @@ EditorShell (src/components/editor/EditorShell.tsx)
 | `src/manim/mobject/helpers/MobjectTree.ts` | `MobjectNode`, `roots` order, parent/children |
 | `src/manim/mobject/helpers/mobjectregistry.ts` | Constructs mobjects by `MobjectName` |
 | `src/manim/serialization/sceneSerializer.ts` | Format v3, validation, restore, v1/v2 migration |
+| `src/manim3d/scene3d.ts` | 3D renderer/scene/loop scaffold (**not wired**) |
+| `src/manim3d/camera3d.ts` | **Only** 3D world↔screen conversion point |
+| `src/manim3d/README.md` | 2D→3D file map, conventions and next steps |
 | `src/manim/tracker/tracker.ts` | Scalar tracker plus vector parent/component model |
 | `src/manim/tracker/trackerSystem.ts` | Tracker registry, bindings, links, vector channel routing |
 | `src/manim/UI/trackerUI.ts` | Tracker UI data, vector creation and binding adapters |
@@ -98,6 +101,27 @@ EditorShell (src/components/editor/EditorShell.tsx)
 | `src/App.tsx` | Route table |
 
 ## Invariants — do not break these
+
+### 3D module (scaffold, not wired)
+
+`src/manim3d/` is a three.js scaffold mapped against `src/manim/`; the file
+table and conventions live in
+[`src/manim3d/README.md`](./src/manim3d/README.md). `Scene3D` owns the WebGL
+renderer, scene graph and loop, `Camera3D` is the only 3D world↔screen
+conversion point, and `Mobject3DManager` currently keeps a flat root list
+(grouping, tree order and selection are deferred).
+
+- Nothing imports `src/manim3d` yet. Do not add a route, provider, editor panel
+  or canvas wiring without an explicit 3D task.
+- Reuse `Signal`, `Value`/`Values`, `ValueType` and `PIXELS_PER_UNIT`. 3D-only
+  factories live in `values3d.ts`. `position`/`scale`/`radius` stay in world
+  units, `opacity` is unitless and `rotation` is radians.
+- The 3D scene format is separate: `manim-web-scene3d` v1 in
+  `serialization/scene3dSerializer.ts` (types/constants only). Do not extend
+  the 2D v3 document with 3D fields.
+- `Mobject3D.sync()` pushes properties to three.js; mutating a `Value` alone
+  does nothing. Materials are disposed by the base class, geometry by the
+  primitive.
 
 ### 1. One scene instance
 
@@ -207,6 +231,11 @@ Rules:
 - Bindings live on the parent. A vector-property binding stores one expression
   per axis; `yExpression` defaults to the x expression. A numeric tracker bound
   to a vector property feeds the same source value to both axes.
+- Property bindings resolve through
+  `mobject.trackerConnector.getConnectorFactory(property).getValue()`. Register
+  per-kind connectors in `TrackerConnectorRegistry.registerMobjectConnectors`
+  and keep the target a `Value<number>` or `Value<Vector>`; the provider owns
+  the definitive list shown in the Trackers panel.
 - Vector trackers cannot bind numeric properties and cannot be tracker-link
   endpoints; reject those cases with explicit errors.
 - Vector properties serialise with `kind: "vector"` and component ids/values,
@@ -252,6 +281,9 @@ behaviour.
 3. Render it using the camera space; use `applyStrokeWidth()` for strokes.
 4. It will serialise automatically because serialization iterates properties.
 5. If it changes units relative to v1, extend `migrateMobjectV1`.
+6. To let trackers drive it, add a `TrackerConnectionName`, register it in
+   `TrackerConnectorRegistry.registerMobjectConnectors`, and update the README
+   connector table. `Value<Range>` needs the `RangeBoundValue` adapter pattern.
 
 ### Add a new mobject kind
 
@@ -284,6 +316,9 @@ behaviour.
 - **Tracker links are numeric-only.** Vector trackers bind directly to
   `position`/`scale`; they cannot be link sources or targets. Bindings target the
   parent tracker, never a component.
+- **Tracker bindings only accept number/vector connectors.** Strings, booleans,
+  colors and raw `Range` values are not bindable; expose scalar min/max adapters
+  when a range should be animatable.
 - **Groups propagate position and opacity.** Child positions are stored
   relative to their parent group, so moving a group moves its subtree and group
   opacity multiplies child opacity. `Group.render()` stays empty because the

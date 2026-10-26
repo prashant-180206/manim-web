@@ -264,13 +264,9 @@ export class TrackerSystem {
       );
     }
 
-    const targetValue = mobject.getPropertyByName(property);
-
-    if (!targetValue) {
-      throw new Error(
-        `Mobject '${mobject.id}' has no '${property}' property.`,
-      );
-    }
+    const targetValue = mobject.trackerConnector
+      .getConnectorFactory(property)
+      .getValue();
 
     const id = this.ids.next("binding_");
 

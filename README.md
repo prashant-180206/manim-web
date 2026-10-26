@@ -354,9 +354,23 @@ Numeric trackers can also target vector properties (the same value feeds both
 axes), while vector trackers cannot target numeric properties or be used as
 tracker-link endpoints.
 
-`TrackerProvider` exposes `opacity`, `position` and `scale` connectors, so both
-numeric and vector properties are bindable. Tracker-to-tracker links remain
-numeric-only.
+`TrackerProvider` registers `opacity`, `position` and `scale` for every
+mobject, plus kind-specific geometry connectors:
+
+| Mobject kind | Extra tracker targets |
+| --- | --- |
+| `Circle`, `Point` | `radius`; `Point` also `labelOffset` |
+| `Line`, `DottedLine`, `ArrowVector` | `start`, `end`; `DottedLine` also `dashLength`, `gapLength`; `ArrowVector` also `headLength`, `headWidth` |
+| `RegularPolygon` | `width`, `height`, `sides` |
+| `Plane` | `width`, `height`, `gridStep`, `labelStep` |
+| `PolarPlane` | `radius`, `radialStep`, `angleStep` |
+| `ParametricPath` | `tMin`, `tMax` |
+| `ParametricShape` | `xMin`, `xMax`, `yMin`, `yMax` (bound to `xRange`/`yRange`) |
+| `PolarShape` | `thetaMin`, `thetaMax` (bound to `thetaRange`) |
+
+Bindings resolve through the mobject's connector factories, not a hard-coded
+property lookup, so aliases and range adapters work the same as normal values.
+Tracker-to-tracker links remain numeric-only.
 
 ### Signals and UI adapters
 
