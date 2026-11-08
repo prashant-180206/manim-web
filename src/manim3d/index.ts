@@ -15,17 +15,65 @@ export { Scene3D, type Scene3DOptions } from "./scene3d";
 
 export { Mobject3D } from "./mobject/mobject3d";
 export {
+  Cube3D,
+  DEFAULT_CUBE_COLOR,
+  type Cube3DOptions,
+  type Cube3DProperty,
+} from "./mobject/cube3d";
+export {
   Sphere3D,
   DEFAULT_SPHERE_COLOR,
   type Sphere3DOptions,
   type Sphere3DProperty,
 } from "./mobject/sphere3d";
 export {
+  Cylinder3D,
+  DEFAULT_CYLINDER_COLOR,
+  type Cylinder3DOptions,
+  type Cylinder3DProperty,
+} from "./mobject/cylinder3d";
+export {
+  Cone3D,
+  DEFAULT_CONE_COLOR,
+  type Cone3DOptions,
+  type Cone3DProperty,
+} from "./mobject/cone3d";
+export {
   Box3D,
   DEFAULT_BOX_COLOR,
   type Box3DOptions,
   type Box3DProperty,
 } from "./mobject/box3d";
+export {
+  Torus3D,
+  DEFAULT_TORUS_COLOR,
+  type Torus3DOptions,
+  type Torus3DProperty,
+} from "./mobject/torus3d";
+export {
+  Arrow3D,
+  DEFAULT_ARROW_COLOR,
+  type Arrow3DOptions,
+  type Arrow3DProperty,
+} from "./mobject/arrow3d";
+export {
+  Line3D,
+  DEFAULT_LINE_COLOR,
+  type Line3DOptions,
+  type Line3DProperty,
+} from "./mobject/line3d";
+export {
+  Dot3D,
+  DEFAULT_DOT_COLOR,
+  type Dot3DOptions,
+  type Dot3DProperty,
+} from "./mobject/dot3d";
+export {
+  Surface3D,
+  DEFAULT_SURFACE_COLOR,
+  type Surface3DOptions,
+  type Surface3DProperty,
+} from "./mobject/surface3d";
 
 export {
   PropertyController3D,

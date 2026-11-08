@@ -84,14 +84,60 @@ const BASE_PROPERTY_TYPES: Record<string, ValueType> = {
 };
 
 const KIND_PROPERTY_TYPES: Record<Mobject3DName, Record<string, ValueType>> = {
+  [Mobject3DName.Cube]: {
+    side: ValueType.number,
+    color: ValueType.color,
+  },
   [Mobject3DName.Sphere]: {
     radius: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Cylinder]: {
+    radius: ValueType.number,
+    height: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Cone]: {
+    radius: ValueType.number,
+    height: ValueType.number,
     color: ValueType.color,
   },
   [Mobject3DName.Box]: {
     width: ValueType.number,
     height: ValueType.number,
     depth: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Torus]: {
+    radius: ValueType.number,
+    tube: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Arrow]: {
+    length: ValueType.number,
+    shaftRadius: ValueType.number,
+    headRadius: ValueType.number,
+    headLength: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Line]: {
+    length: ValueType.number,
+    radius: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Dot]: {
+    radius: ValueType.number,
+    color: ValueType.color,
+  },
+  [Mobject3DName.Surface]: {
+    xExpression: ValueType.string,
+    yExpression: ValueType.string,
+    zExpression: ValueType.string,
+    uMin: ValueType.number,
+    uMax: ValueType.number,
+    vMin: ValueType.number,
+    vMax: ValueType.number,
+    samples: ValueType.number,
     color: ValueType.color,
   },
 };

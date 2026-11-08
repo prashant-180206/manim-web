@@ -7,6 +7,7 @@ import { SelectionManager } from "./utils/selection";
 import { AnimationSystem } from "./animation/animationsystem";
 import { TrackerSystem } from "./tracker/trackerSystem";
 import { Camera } from "./camera";
+import { SceneProperties } from "./sceneProperties";
 import type { Vector } from "./utils/types";
 
 export class Scene {
@@ -36,6 +37,9 @@ export class Scene {
 
   /** World-unit ↔ pixel conversion for this scene. */
   readonly camera = new Camera();
+
+  /** Authored scene-wide settings such as background and aspect ratio. */
+  readonly properties = new SceneProperties();
 
   // readonly trackers: TrackerSystem;
 
@@ -98,6 +102,17 @@ export class Scene {
 
   private initializeRenderer(): void {}
 
+  /** Keep the camera frame in sync with the authored aspect ratio. */
+  private syncCameraFrame(): void {
+    this.camera.setAspectRatio(this.properties.ratio);
+  }
+
+  /** Authored frame in CSS pixels, centred inside the canvas. */
+  get frameRect(): { x: number; y: number; width: number; height: number } {
+    this.syncCameraFrame();
+    return this.camera.frame;
+  }
+
   /**
    * Convert a browser pointer event into world coordinates. The canvas may be
    * laid out at a different CSS size than its logical camera size, so the
@@ -112,6 +127,21 @@ export class Scene {
       x: ((event.clientX - rect.left) / rect.width) * this.camera.width,
       y: ((event.clientY - rect.top) / rect.height) * this.camera.height,
     };
+
+    this.syncCameraFrame();
+
+    const frame = this.camera.frame;
+
+    // Clicks on the letterbox matte should not select objects that are clipped
+    // out of the authored frame.
+    if (
+      screen.x < frame.x ||
+      screen.x > frame.x + frame.width ||
+      screen.y < frame.y ||
+      screen.y > frame.y + frame.height
+    ) {
+      return null;
+    }
 
     return this.camera.screenToWorld(screen);
   }
@@ -195,14 +225,108 @@ export class Scene {
   }
 
   render() {
-    // Clear in device space, then draw the whole scene in world units.
+    this.syncCameraFrame();
+
+    // Clear and paint the backdrop in device space so the background and
+    // letterbox matte stay outside the world transform.
     this.camera.clear(this.ctx);
+    this.renderBackground();
+
+    const frame = this.camera.frame;
+    const pixelRatio = this.camera.pixelRatio;
+
+    // Clip mobjects to the authored frame, then draw the whole scene in world
+    // units.
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.beginPath();
+    this.ctx.rect(
+      frame.x * pixelRatio,
+      frame.y * pixelRatio,
+      frame.width * pixelRatio,
+      frame.height * pixelRatio,
+    );
+    this.ctx.clip();
+
     this.camera.applyTransform(this.ctx);
     this.ctx.globalAlpha = 1;
 
     for (const root of this.mobjectManager.tree.roots) {
       this.renderNode(root);
     }
+
+    this.ctx.restore();
+    this.renderFrameBorder();
+  }
+
+  private renderBackground(): void {
+    const ctx = this.ctx;
+    const frame = this.camera.frame;
+    const pixelRatio = this.camera.pixelRatio;
+    const opacityValue = this.properties.backgroundOpacity.get();
+    const opacity = Number.isFinite(opacityValue)
+      ? Math.max(0, Math.min(1, opacityValue))
+      : 1;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    if (this.camera.aspectRatio !== null) {
+      // Opaque matte around the frame, so the frame reads as the authored
+      // canvas. The frame itself is left transparent for low-opacity
+      // backgrounds, which lets the editor canvas grid show through.
+      const left = frame.x * pixelRatio;
+      const top = frame.y * pixelRatio;
+      const right = (frame.x + frame.width) * pixelRatio;
+      const bottom = (frame.y + frame.height) * pixelRatio;
+      const canvasWidth = this.canvas.width;
+      const canvasHeight = this.canvas.height;
+
+      ctx.fillStyle = "#08080a";
+
+      if (left > 0) ctx.fillRect(0, 0, left, canvasHeight);
+      if (right < canvasWidth) {
+        ctx.fillRect(right, 0, canvasWidth - right, canvasHeight);
+      }
+      if (top > 0) ctx.fillRect(left, 0, right - left, top);
+      if (bottom < canvasHeight) {
+        ctx.fillRect(left, bottom, right - left, canvasHeight - bottom);
+      }
+    }
+
+    if (opacity > 0) {
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = this.properties.backgroundColor.get();
+      ctx.fillRect(
+        frame.x * pixelRatio,
+        frame.y * pixelRatio,
+        frame.width * pixelRatio,
+        frame.height * pixelRatio,
+      );
+    }
+
+    ctx.restore();
+  }
+
+  private renderFrameBorder(): void {
+    if (this.camera.aspectRatio === null) return;
+
+    const ctx = this.ctx;
+    const frame = this.camera.frame;
+    const pixelRatio = this.camera.pixelRatio;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+    ctx.lineWidth = Math.max(1, pixelRatio);
+    ctx.strokeRect(
+      frame.x * pixelRatio,
+      frame.y * pixelRatio,
+      frame.width * pixelRatio,
+      frame.height * pixelRatio,
+    );
+    ctx.restore();
   }
 
   private renderNode(node: MobjectNode) {

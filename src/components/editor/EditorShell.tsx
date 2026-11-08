@@ -14,6 +14,7 @@ import {
   FileCode,
   FileX,
   FolderOpen,
+  Frame,
   Link2,
   ListTree,
   MonitorPlay,
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import SceneCanvas from "@/components/SceneCanvas";
 import { SceneTreePanel } from "./SceneTreePanel";
+import { ScenePropertiesPanel } from "./ScenePropertiesPanel";
 import { InspectorPanel } from "./InspectorPanel";
 import { AnimationsPanel } from "./AnimationsPanel";
 import { TrackersPanel } from "./TrackersPanel";
@@ -84,6 +86,7 @@ import { LayersPanel } from "./LayersPanel";
 
 type EditorView =
   | "scene"
+  | "sceneProperties"
   | "layers"
   | "inspector"
   | "animations"
@@ -100,6 +103,12 @@ interface ViewDefinition {
 
 const views: ViewDefinition[] = [
   { id: "scene", label: "Scene", icon: Boxes, shortcut: "1" },
+  {
+    id: "sceneProperties",
+    label: "Scene properties",
+    icon: Frame,
+    shortcut: "7",
+  },
   { id: "layers", label: "Layers", icon: ListTree, shortcut: "5" },
   {
     id: "inspector",
@@ -134,7 +143,7 @@ const shortcuts: { keys: string[]; label: string }[] = [
   { keys: ["←", "→"], label: "Seek by 0.1s (hold Shift for 1s)" },
   { keys: ["Ctrl", "B"], label: "Toggle the sidebar" },
   { keys: ["Ctrl", "J"], label: "Toggle the bottom panel" },
-  { keys: ["1", "–", "5"], label: "Switch sidebar views" },
+  { keys: ["1", "–", "7"], label: "Switch sidebar views" },
 ];
 
 interface FileMenuItemProps {
@@ -674,6 +683,8 @@ export function EditorShell({ scene }: EditorShellProps) {
     switch (activeView) {
       case "scene":
         return <SceneTreePanel />;
+      case "sceneProperties":
+        return <ScenePropertiesPanel />;
       case "layers":
         return <LayersPanel />;
       case "inspector":

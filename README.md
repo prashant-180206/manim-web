@@ -13,7 +13,8 @@ React owns the editor shells and consumes the UI adapter classes in
 > inspecting, animating and saving mobjects. Canvas click-to-select and
 > modifier-click multi-selection are wired; dragging and marquee selection
 > still happen through the panels. The 3D Studio at `/scene3d` can create,
-> select, inspect, transform, save/open and undo/redo spheres and boxes; 3D
+> select, inspect, transform, save/open and undo/redo cubes, spheres, cylinders,
+> cones, prisms, tori, arrows, lines, dots and parametric surfaces; 3D
 > animations, trackers and grouping are not implemented yet.
 
 For agent-oriented context, invariants and change recipes, see
@@ -32,6 +33,9 @@ For agent-oriented context, invariants and change recipes, see
   optional point labels that show the name or position vector
 - **Scene** panel: create mobjects, rename, delete, group/ungroup, visibility
   and lock toggles
+- **Scene properties** panel: set the scene background colour/opacity and the
+  authored aspect ratio (presets or a custom `width:height`), with live frame
+  and visible-world measurements
 - **Layers** panel: front-to-back mobject tree with grouped layers, draw-order
   badges and drag-and-drop reordering/reparenting
 - **Inspector** panel: edit every property of the selected mobject, with unit
@@ -52,7 +56,9 @@ For agent-oriented context, invariants and change recipes, see
 - shadcn/ui + semantic design tokens, dark editor theme
 - **3D Studio** at `/scene3d`: separate provider/canvas/editor for three.js
   scenes, with raycast click/modifier multi-selection, Scene/Inspector/Camera
-  panels, undo/redo and an independent `manim-web-scene3d` JSON format
+  panels, undo/redo and an independent `manim-web-scene3d` JSON format.
+  Primitives: cube, sphere, cylinder, cone, prism (box), torus, arrow, line,
+  dot and a parametric surface driven by `u`/`v` expressions.
 
 ## Routes
 
@@ -60,7 +66,7 @@ For agent-oriented context, invariants and change recipes, see
 | ------------- | --------------------------------------------------------------------------------------------- |
 | `/`           | Scene Studio editor                                                                           |
 | `/scene`      | Alias for the Scene Studio editor                                                             |
-| `/scene3d`    | 3D Studio editor (three.js): spheres and boxes, camera, save/open                             |
+| `/scene3d`    | 3D Studio editor (three.js): cubes, spheres, cylinders, cones, prisms, tori, arrows, lines, dots, surfaces |
 | `/playground` | Legacy canvas playground: create mobjects and render them                                     |
 | `/values`     | Value-editor lab for every supported `ValueType`, including color                            |
 
@@ -100,7 +106,7 @@ pnpm tauri build  # package the desktop app
 | `←` / `→`        | Seek by 0.1 s (`Shift` = 1 s)       |
 | `Ctrl/Cmd + B`   | Toggle the sidebar                  |
 | `Ctrl/Cmd + J`   | Toggle the bottom panel             |
-| `1` … `6`        | Switch sidebar views                |
+| `1` … `7`        | Switch sidebar views                |
 | `?`              | Open the shortcut help overlay      |
 
 ## Coordinate system
@@ -119,6 +125,14 @@ All geometry is authored in **world units**, not pixels.
 pixels. `Scene.render()` clears the device-space canvas and then installs the
 world-to-device transform. The base `Mobject.beginRender()` transform therefore
 works directly in world units.
+
+The scene background and aspect ratio are authored in the **Scene properties**
+panel. When an aspect ratio other than `free` is set, the camera letterboxes the
+authored frame inside the canvas, paints the surrounding matte, and clips
+mobjects to the frame. The world scale stays fixed at `50 px/unit`; the visible
+world rectangle simply becomes the letterboxed frame. The frame, background and
+matte are drawn in device space so they are unaffected by zoom or the y-up
+camera transform.
 
 ### Geometry vs. screen styles
 
@@ -217,6 +231,9 @@ A document contains:
   `from`, source ids and alias → tracker-id mappings)
 - timeline current time
 - scene name and viewport size at save time
+- `sceneProperties`: background colour, background opacity and authored aspect
+  ratio (optional; missing fields fall back to the defaults, so older files open
+  unchanged)
 
 Version 3 stores group children in parent-relative coordinates. Older v1/v2
 files store world positions and are migrated on open.
@@ -465,7 +482,7 @@ src/
 ├── manim3d/                     # three.js engine (framework-independent)
 │   ├── scene3d.ts               # Scene3D: renderer, lights, loop, input, selection
 │   ├── camera3d.ts              # 3D world ↔ screen framing
-│   ├── mobject/                 # Base mobject, sphere/box, manager, registry
+│   ├── mobject/                 # Base mobject, primitives, manager, registry
 │   ├── serialization/           # manim-web-scene3d v1 format
 │   ├── UI/                      # 3D creation/tree adapter data
 │   └── utils/                   # 3D values, types, raycast selection

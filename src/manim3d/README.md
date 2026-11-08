@@ -33,10 +33,10 @@ src/components/editor3d/         Editor3DShell + panels + history + files
 | `scene.ts` | `scene3d.ts` | Renderer, scene, lights, loop, resize, input, selection, dispose |
 | `camera.ts` | `camera3d.ts` | Perspective framing; 1 unit = 50 CSS px at the target plane |
 | `mobject/mobect.ts` | `mobject/mobject3d.ts` | Base transform + `Value` properties + `sync()` |
-| `mobject/circle.ts`, `regularPolygon.ts` | `mobject/sphere3d.ts`, `mobject/box3d.ts` | Two starter primitives |
+| `mobject/circle.ts`, `regularPolygon.ts` | `mobject/*3d.ts` | Built-in primitives (cube, sphere, cylinder, cone, prism, torus, arrow, line, dot, surface) |
 | `mobject/helpers/propertycontroller.ts` | `mobject/helpers/propertycontroller3d.ts` | 3D property bag |
 | `mobject/helpers/proprertytypes.ts` | folded into `propertycontroller3d.ts` | `BaseProperty3D` + factory |
-| `mobject/helpers/mobjectName.ts` | `mobject/helpers/mobject3dName.ts` | `Sphere`, `Box` |
+| `mobject/helpers/mobjectName.ts` | `mobject/helpers/mobject3dName.ts` | `Cube`, `Sphere`, `Cylinder`, `Cone`, `Box`, `Torus`, `Arrow`, `Line`, `Dot`, `Surface` |
 | `mobject/helpers/mobjectregistry.ts` | `mobject/helpers/mobject3dRegistry.ts` | `(id, name)` constructors |
 | `mobject/helpers/mobjectmanager.ts` | `mobject/helpers/mobject3dManager.ts` | Flat roots, ids, add/delete/restore |
 | `mobject/helpers/MobjectTree.ts` | — | Grouping/tree is deferred |
@@ -53,8 +53,10 @@ src/components/editor3d/         Editor3DShell + panels + history + files
 ## Conventions
 
 - **World units are shared with 2D.** `1 unit = 50 CSS pixels`
-  (`PIXELS_PER_UNIT`). `position`, `scale`, `radius`, `width`, `height` and
-  `depth` are world units; `opacity` is unitless and `rotation` is radians.
+  (`PIXELS_PER_UNIT`). `position`, `scale`, `radius`, `width`, `height`,
+  `depth`, `side`, `tube`, `length`, `shaftRadius`, `headRadius`, `headLength`
+  and the surface ranges `uMin`/`uMax`/`vMin`/`vMax` are world units; `opacity`
+  is unitless and `rotation` is radians.
 - **+x right, +y up, +z toward the viewer.** The default camera sits on `+z`
   and looks down `-z` at the `z = 0` focus plane.
 - **Properties use the existing `Value` helpers.** `Values3D.vector3()` and
@@ -74,6 +76,35 @@ src/components/editor3d/         Editor3DShell + panels + history + files
   toggles an object in the multi-selection.
 - **Separate file format.** `SCENE3D_FILE_FORMAT = "manim-web-scene3d"` and
   `SCENE3D_FILE_VERSION = 1`; the 2D v3 format is not extended with 3D fields.
+
+## Built-in primitives
+
+| Kind (`Mobject3DName`) | Class | File | Geometry properties |
+| --- | --- | --- | --- |
+| `Cube` | `Cube3D` | `mobject/cube3d.ts` | `side`, `color` |
+| `Sphere` | `Sphere3D` | `mobject/sphere3d.ts` | `radius`, `color` |
+| `Cylinder` | `Cylinder3D` | `mobject/cylinder3d.ts` | `radius`, `height`, `color` |
+| `Cone` | `Cone3D` | `mobject/cone3d.ts` | `radius`, `height`, `color` |
+| `Box` | `Box3D` | `mobject/box3d.ts` | `width`, `height`, `depth`, `color` |
+| `Torus` | `Torus3D` | `mobject/torus3d.ts` | `radius`, `tube`, `color` |
+| `Arrow` | `Arrow3D` | `mobject/arrow3d.ts` | `length`, `shaftRadius`, `headRadius`, `headLength`, `color` |
+| `Line` | `Line3D` | `mobject/line3d.ts` | `length`, `radius`, `color` |
+| `Dot` | `Dot3D` | `mobject/dot3d.ts` | `radius`, `color` |
+| `Surface` | `Surface3D` | `mobject/surface3d.ts` | `xExpression`, `yExpression`, `zExpression`, `uMin`, `uMax`, `vMin`, `vMax`, `samples`, `color` |
+
+Notes:
+
+- The persisted `Box` kind is the general rectangular solid. The UI labels it
+  **Prism**; the enum value stays `Box` so existing scene files keep loading.
+- `Line3D` is a thin cylinder and `Arrow3D` is a shaft cylinder plus a cone
+  head. Both are centred on the origin and point along local `+y`; use
+  `rotation` to aim them.
+- `Surface3D` evaluates `x`/`y`/`z` expressions with `expr-eval` over a
+  `(u, v)` grid. Invalid expressions or non-finite samples keep the last good
+  geometry, so typing in the Inspector cannot stop the render loop. `samples`
+  is clamped to `2…160` grid segments per axis.
+- Every primitive owns its geometry and disposes it in `dispose()`; materials
+  are disposed by `Mobject3D`. Property edits must call `sync()`.
 
 ## Public entry point
 

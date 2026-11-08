@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { CollapsibleSection } from "../editor/CollapsibleSection";
 import { PanelHeader } from "../editor/editorPrimitives";
 import { formatErrorMessage, useEditor3D } from "./editor3dContext";
+import { MOBJECT3D_LABELS } from "@/manim3d/UI/mobject3dUI";
 
 function formatLabel(key: string): string {
   return key
@@ -35,17 +36,29 @@ function formatLabel(key: string): string {
 /** 3D geometry uses world units; rotation is radians; opacity is unitless. */
 function unitHint3D(key: string): string | null {
   if (key === "rotation") return "rad";
+  if (key === "opacity") return "0–1";
+  if (key === "samples") return "grid";
+  if (key.endsWith("Expression")) return "f(u, v)";
   if (
     key === "position" ||
     key === "scale" ||
     key === "radius" ||
     key === "width" ||
     key === "height" ||
-    key === "depth"
+    key === "depth" ||
+    key === "side" ||
+    key === "tube" ||
+    key === "length" ||
+    key === "shaftRadius" ||
+    key === "headRadius" ||
+    key === "headLength" ||
+    key === "uMin" ||
+    key === "uMax" ||
+    key === "vMin" ||
+    key === "vMax"
   ) {
     return "units";
   }
-  if (key === "opacity") return "0–1";
   return null;
 }
 
@@ -194,7 +207,7 @@ export function Inspector3DPanel() {
                 {mobject.id}
               </Badge>
               <Badge variant="secondary">
-                <Boxes /> {mobject.kind}
+                <Boxes /> {MOBJECT3D_LABELS[mobject.kind] ?? mobject.kind}
               </Badge>
               {!mobject.visible && <Badge variant="secondary">Hidden</Badge>}
               {mobject.locked && <Badge variant="secondary">Locked</Badge>}

@@ -41,6 +41,7 @@ export async function readSceneFile(file: File): Promise<SceneDocument> {
 
 export function hasSceneContent(scene: Scene): boolean {
   return (
+    !scene.properties.isDefault() ||
     scene.mobjectManager.tree.nodes.size > 0 ||
     [...scene.animationSystem.all()].length > 0 ||
     [...scene.trackerSystem.getTrackerInfo()].length > 0

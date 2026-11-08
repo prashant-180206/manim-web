@@ -221,7 +221,7 @@ function CanvasPane() {
             </div>
             <p className="text-sm font-medium">The 3D canvas is empty</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Create a sphere or box from the Scene panel, then inspect its
+              Create a primitive from the Scene panel, then inspect its
               transform, material and geometry.
             </p>
           </div>

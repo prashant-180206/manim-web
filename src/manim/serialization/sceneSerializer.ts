@@ -21,6 +21,12 @@ import { Easing, type EasingFunction } from "../utils/easing";
 import { Value, Values, ValueType } from "../utils/value";
 import type { Range, Vector } from "../utils/types";
 import { TrackerConnectionName } from "../tracker/trackerconnectorNames";
+import {
+  DEFAULT_SCENE_ASPECT_RATIO,
+  DEFAULT_SCENE_BACKGROUND_COLOR,
+  DEFAULT_SCENE_BACKGROUND_OPACITY,
+  parseAspectRatio,
+} from "../sceneProperties";
 
 export const SCENE_FILE_FORMAT = "manim-web-scene";
 export const SCENE_FILE_VERSION = 3;
@@ -97,6 +103,13 @@ export interface SerializedTrackerConnection {
   variables?: Record<string, string>;
 }
 
+/** Scene-wide settings such as the backdrop and authored aspect ratio. */
+export interface SerializedSceneProperties {
+  backgroundColor: SerializedValue;
+  backgroundOpacity: SerializedValue;
+  aspectRatio: SerializedValue;
+}
+
 export interface SceneDocument {
   format: typeof SCENE_FILE_FORMAT;
   version: typeof SCENE_FILE_VERSION;
@@ -104,6 +117,7 @@ export interface SceneDocument {
   savedAt: string;
   width: number;
   height: number;
+  sceneProperties: SerializedSceneProperties;
   mobjects: SerializedMobject[];
   animations: SerializedAnimation[];
   trackers: SerializedTracker[];
@@ -186,6 +200,14 @@ function serializeNode(node: MobjectNode): SerializedMobject {
   };
 }
 
+function serializeSceneProperties(scene: Scene): SerializedSceneProperties {
+  return {
+    backgroundColor: serializeValue(scene.properties.backgroundColor),
+    backgroundOpacity: serializeValue(scene.properties.backgroundOpacity),
+    aspectRatio: serializeValue(scene.properties.aspectRatio),
+  };
+}
+
 function serializeAnimation(
   scene: Scene,
   animation: Animation,
@@ -226,6 +248,7 @@ export function serializeScene(
     savedAt: new Date().toISOString(),
     width: scene.width,
     height: scene.height,
+    sceneProperties: serializeSceneProperties(scene),
     mobjects: scene.mobjectManager.tree.roots.map(serializeNode),
     animations: [...scene.animationSystem.all()]
       .map((animation) => serializeAnimation(scene, animation))
@@ -372,6 +395,75 @@ function validateValue(value: unknown, label: string): SerializedValue {
   return { type: type as ValueType, value: payload };
 }
 
+function defaultSceneProperties(): SerializedSceneProperties {
+  return {
+    backgroundColor: {
+      type: ValueType.color,
+      value: DEFAULT_SCENE_BACKGROUND_COLOR,
+    },
+    backgroundOpacity: {
+      type: ValueType.number,
+      value: DEFAULT_SCENE_BACKGROUND_OPACITY,
+    },
+    aspectRatio: {
+      type: ValueType.string,
+      value: DEFAULT_SCENE_ASPECT_RATIO,
+    },
+  };
+}
+
+/**
+ * Scene properties are optional on older documents. Missing fields fall back
+ * to their defaults so v1–v3 files keep opening without a migration step.
+ */
+function validateSceneProperties(value: unknown): SerializedSceneProperties {
+  const defaults = defaultSceneProperties();
+
+  if (value === undefined || value === null) return defaults;
+
+  if (!isRecord(value)) fail("sceneProperties must be an object.");
+
+  const read = (
+    key: keyof SerializedSceneProperties,
+    type: ValueType,
+  ): SerializedValue => {
+    const raw = value[key];
+
+    if (raw === undefined) return defaults[key];
+
+    const parsed = validateValue(raw, `sceneProperties.${key}`);
+
+    if (parsed.type !== type) {
+      fail(`sceneProperties.${key} must be a '${type}' value.`);
+    }
+
+    return parsed;
+  };
+
+  const backgroundColor = read("backgroundColor", ValueType.color);
+  const backgroundOpacity = read("backgroundOpacity", ValueType.number);
+  const aspectRatio = read("aspectRatio", ValueType.string);
+
+  const opacity = backgroundOpacity.value as number;
+
+  if (opacity < 0 || opacity > 1) {
+    fail("sceneProperties.backgroundOpacity must be between 0 and 1.");
+  }
+
+  const ratio = aspectRatio.value as string;
+
+  if (
+    ratio.trim().toLowerCase() !== "free" &&
+    parseAspectRatio(ratio) === null
+  ) {
+    fail(
+      "sceneProperties.aspectRatio must be 'free' or a positive width:height ratio.",
+    );
+  }
+
+  return { backgroundColor, backgroundOpacity, aspectRatio };
+}
+
 const mobjectKinds = new Set<string>(Object.values(MobjectName));
 const animationNames = new Set<string>(Object.values(AnimationName));
 const connectorNames = new Set<string>(
@@ -458,6 +550,7 @@ export function parseSceneDocument(input: unknown): SceneDocument {
   }
 
   const ids = new Set<string>();
+  const sceneProperties = validateSceneProperties(data.sceneProperties);
   const mobjects = expectArray(data.mobjects, "mobjects").map(
     (mobject, index) => validateMobject(mobject, `mobjects[${index}]`, ids),
   );
@@ -756,6 +849,7 @@ export function parseSceneDocument(input: unknown): SceneDocument {
       typeof data.savedAt === "string" ? data.savedAt : new Date(0).toISOString(),
     width: typeof data.width === "number" ? data.width : 0,
     height: typeof data.height === "number" ? data.height : 0,
+    sceneProperties,
     mobjects,
     animations,
     trackers,
@@ -1061,7 +1155,18 @@ function deserializeAnimationInput(
   return input;
 }
 
-/** Remove every mobject, animation and tracker from the scene. */
+function applySceneProperties(
+  scene: Scene,
+  data: SerializedSceneProperties,
+): void {
+  scene.properties.backgroundColor.set(data.backgroundColor.value as string);
+  scene.properties.backgroundOpacity.set(
+    Math.max(0, Math.min(1, data.backgroundOpacity.value as number)),
+  );
+  scene.properties.aspectRatio.set(data.aspectRatio.value as string);
+}
+
+/** Remove every mobject, animation and tracker and reset scene settings. */
 export function clearScene(scene: Scene): void {
   scene.animationSystem.clear();
   scene.trackerSystem.clear();
@@ -1072,6 +1177,7 @@ export function clearScene(scene: Scene): void {
 
   scene.selection.editingSelection.clear();
   scene.selection.selectMobject(null);
+  scene.properties.reset();
   scene.mobjectManager.onTreeChanged.emit();
 }
 
@@ -1088,6 +1194,11 @@ export function applyScene(
   const mobjects = new Map<string, Mobject>();
 
   try {
+    applySceneProperties(
+      scene,
+      document.sceneProperties ?? defaultSceneProperties(),
+    );
+
     const restoreNodes = (
       nodes: SerializedMobject[],
       parentId: string | null,

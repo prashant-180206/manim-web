@@ -275,7 +275,7 @@ export function Scene3DTreePanel() {
         >
           {tree.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
-              The scene is empty. Create a sphere or box above to get started.
+              The scene is empty. Create an object above to get started.
             </div>
           ) : (
             <div className="space-y-0.5">

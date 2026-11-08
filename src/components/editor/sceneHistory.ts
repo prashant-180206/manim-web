@@ -39,6 +39,7 @@ const COALESCE_MS = 350;
  */
 function contentSignature(document: SceneDocument): string {
   return JSON.stringify({
+    sceneProperties: document.sceneProperties,
     mobjects: document.mobjects,
     animations: document.animations,
     trackers: document.trackers,

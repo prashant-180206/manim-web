@@ -13,8 +13,9 @@ legacy playground is `/playground` and the value lab is `/values`.
 animate, save/open scenes). Canvas click-to-select and modifier-click
 multi-selection are wired. Dragging, marquee selection and z-order changes still
 happen through the panels. The 3D editor can create, select, inspect, transform,
-save/open and undo/redo spheres and boxes; 3D animations, trackers and grouping
-are not implemented.
+save/open and undo/redo cubes, spheres, cylinders, cones, prisms, tori, arrows,
+lines, dots and parametric surfaces; 3D animations, trackers and grouping are
+not implemented.
 
 ## Verification
 
@@ -94,6 +95,7 @@ Editor3DShell (src/components/editor3d/Editor3DShell.tsx)
 | `src/components/editor/editorActions.ts` | Selection, delete, seek, group helpers used by panels |
 | `src/components/editor/sceneFiles.ts` | Download/read scene files, empty-scene check |
 | `src/components/editor/SceneTreePanel.tsx` | Creation palette, rename, group/ungroup, visibility/lock |
+| `src/components/editor/ScenePropertiesPanel.tsx` | Background colour/opacity, aspect ratio, frame measurements |
 | `src/components/editor/LayersPanel.tsx` | Front-to-back tree, DnD and arrange actions |
 | `src/components/editor/InspectorPanel.tsx` | Property editing, unit hints, center action |
 | `src/components/editor/AnimationsPanel.tsx` | Animation creation/removal |
@@ -104,6 +106,7 @@ Editor3DShell (src/components/editor3d/Editor3DShell.tsx)
 | `src/components/editor/sceneHistory.ts` | Snapshot-based undo/redo for editor mutations |
 | `src/manim/scene.ts` | Canvas/camera ownership, render loop, tree rendering |
 | `src/manim/camera.ts` | **Only** world↔pixel conversion point |
+| `src/manim/sceneProperties.ts` | Background/aspect-ratio model, presets and ratio helpers |
 | `src/manim/utils/units.ts` | `PIXELS_PER_UNIT = 50`, conversion helpers, unit rules |
 | `src/manim/mobject/mobect.ts` | Base transform, `worldToLocal`, `applyStrokeWidth` |
 | `src/manim/mobject/plane.ts` | Grid/axes/labels plane with feature-aware hit testing |
@@ -157,7 +160,15 @@ selection. `Camera3D` is the only 3D world↔screen conversion point.
   locked and zero-opacity mobjects. Do not add drag, marquee or pan assumptions.
 - Reuse `Signal`, `Value`/`Values`, `ValueType` and `PIXELS_PER_UNIT`. 3D-only
   factories live in `values3d.ts`. `position`/`scale`/`radius`/`width`/`height`/
-  `depth` stay in world units, `opacity` is unitless and `rotation` is radians.
+  `depth`/`side`/`tube`/`length`/`shaftRadius`/`headRadius`/`headLength`/
+  `uMin`/`uMax`/`vMin`/`vMax` stay in world units, `opacity` is unitless and
+  `rotation` is radians.
+- Built-in 3D primitives live in `src/manim3d/mobject/`: `Cube3D`, `Sphere3D`,
+  `Cylinder3D`, `Cone3D`, `Box3D` (surfaced in the UI as **Prism** for file
+  compatibility), `Torus3D`, `Arrow3D`, `Line3D`, `Dot3D` and `Surface3D`.
+  `Arrow3D` and `Line3D` point along local `+y` and are centred on the origin;
+  `Surface3D` evaluates `xExpression`/`yExpression`/`zExpression` over a
+  `(u, v)` grid with `expr-eval` and keeps the last good mesh on a parse error.
 - The 3D scene format is separate: `manim-web-scene3d` v1 in
   `serialization/scene3dSerializer.ts` (serialize/parse/apply/clear). Do not
   extend the 2D v3 document with 3D fields.
@@ -193,6 +204,16 @@ If the provider's canvas is not mounted, the scene still renders offscreen.
   converts the world click point into the node's parent space first.
 - Do not manually add `scene.width / 2` / `scene.height / 2` to positions.
   New objects spawn at the world origin (`{ x: 0, y: 0 }`).
+- Scene-wide composition lives on `scene.properties` (`SceneProperties`):
+  `backgroundColor`, `backgroundOpacity` and `aspectRatio`. They are authored
+  through `ScenePropertiesPanel` and serialized with the scene.
+- `aspectRatio` is `"free"` or a `"W:H"` string. `Camera.setAspectRatio()`
+  letterboxes the authored `camera.frame`; `worldToScreen`, `screenToWorld`,
+  `bounds`, `applyTransform` and `Scene.frameRect` must all use that frame.
+  Keep the `50 px/unit` world scale unchanged.
+- `Scene.render()` paints the background/matte and frame border in device space,
+  then clips mobjects to the frame before applying the world transform. Clicks
+  on the matte return `null` instead of selecting clipped mobjects.
 
 ### 3. Screen styles are not geometry
 
@@ -246,8 +267,9 @@ Reject drops onto self or descendants (`isDescendantOf`).
 The document covers the mobject tree (including order, ids, visibility, lock,
 all properties), animations, trackers (including vector component ids/values),
 property bindings (including optional per-axis `yExpression`), tracker
-connections and timeline time. Serialization order preserves z-order and ids
-preserve animation/tracker targets.
+connections, timeline time and `sceneProperties` (background colour/opacity and
+authored aspect ratio). Serialization order preserves z-order and ids preserve
+animation/tracker targets.
 
 Public API:
 
@@ -267,6 +289,11 @@ Rules:
 - V3 stores child positions relative to their parent group; v1/v2 files store
   world positions and are converted during parsing.
 - Bump `SCENE_FILE_VERSION` for incompatible changes and add a migration path.
+- `sceneProperties` is optional on load: missing keys fall back to the defaults
+  (`#0b0b0f`, opacity `1`, `"free"`), so existing v1–v3 files keep opening
+  without a version bump. Validation rejects out-of-range opacity and malformed
+  ratios. `clearScene()` resets the properties, and undo/redo signatures include
+  them.
 
 ### 8. Vector trackers and tracker expressions
 
@@ -335,7 +362,7 @@ behaviour.
    `useEditor()`.
 2. Add an entry to `views` (id, label, icon, shortcut) in `EditorShell.tsx`.
 3. Extend the `EditorView` union and `renderPanel()` switch.
-4. If it needs a new shortcut digit, keep `1`–`6` order intuitive.
+4. If it needs a new shortcut digit, keep `1`–`7` order intuitive.
 
 ### Add an editable mobject property
 
