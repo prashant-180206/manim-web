@@ -1,8 +1,13 @@
-import { ValueType } from "@/manim/utils/value";
+import { ValueType, Values } from "@/manim/utils/value";
 import type { Value } from "@/manim/utils/value";
+import { Easing } from "@/manim/utils/easing";
 import type { Scene3D } from "../scene3d";
 import type { Mobject3D } from "../mobject/mobject3d";
 import { Mobject3DName } from "../mobject/helpers/mobject3dName";
+import { Animation3DName } from "../animation/animation3dName";
+import type { Animation3DInput } from "../animation/animation3dProvider";
+import { Values3D } from "../utils/values3d";
+import type { Scene3DPropertiesData } from "../scene3dProperties";
 import { clone3, type Vector3Data } from "../utils/types3d";
 
 /*
@@ -64,6 +69,7 @@ export interface Scene3DDocument {
   width: number;
   height: number;
   camera: SerializedCamera3D;
+  properties?: Scene3DPropertiesData;
   mobjects: SerializedMobject3D[];
   animations: SerializedAnimation3D[];
   timeline: {
@@ -214,6 +220,38 @@ export function serializeScene3D(
   scene: Scene3D,
   name = "untitled.scene3d",
 ): Scene3DDocument {
+  const animations: SerializedAnimation3D[] = [];
+
+  for (const anim of scene.animationSystem.all()) {
+    const easingKey = anim.input?.easingName ?? "easeInOut";
+    const params: Record<string, SerializedValue3D> = {};
+
+    if (anim.input) {
+      for (const [key, val] of Object.entries(anim.input)) {
+        if (
+          key !== "duration" &&
+          key !== "easing" &&
+          key !== "easingName" &&
+          val &&
+          typeof val === "object" &&
+          "type" in val &&
+          "get" in val
+        ) {
+          params[key] = serializeValue(val as Value<unknown>);
+        }
+      }
+    }
+
+    animations.push({
+      targetId: anim.target.id,
+      name: anim.name,
+      start: scene.animationSystem.getStart(anim.id),
+      duration: anim.duration,
+      easing: easingKey,
+      params,
+    });
+  }
+
   return {
     format: SCENE3D_FILE_FORMAT,
     version: SCENE3D_FILE_VERSION,
@@ -225,9 +263,10 @@ export function serializeScene3D(
       fov: scene.camera.camera.fov,
       target: clone3(scene.camera.target),
     },
+    properties: scene.properties.get(),
     mobjects: scene.mobjectManager.all().map(serializeMobject3D),
-    animations: [],
-    timeline: { currentTime: 0 },
+    animations,
+    timeline: { currentTime: scene.animationSystem.currentTime },
   };
 }
 
@@ -458,8 +497,51 @@ export function parseScene3DDocument(input: unknown): Scene3DDocument {
     throw new Error("The scene document must have an animations array.");
   }
 
-  if (data.animations.length > 0) {
-    throw new Error("3D animations are not supported yet.");
+  const validatedAnimations: SerializedAnimation3D[] = [];
+  for (let i = 0; i < data.animations.length; i++) {
+    const entry = data.animations[i];
+    if (!isRecord(entry)) {
+      throw new Error(`animations[${i}] must be an object.`);
+    }
+    if (typeof entry.targetId !== "string" || !ids.has(entry.targetId)) {
+      throw new Error(
+        `animations[${i}].targetId '${String(entry.targetId)}' must reference an existing mobject.`,
+      );
+    }
+    if (
+      typeof entry.name !== "string" ||
+      !Object.values(Animation3DName).includes(entry.name as Animation3DName)
+    ) {
+      throw new Error(
+        `animations[${i}].name '${String(entry.name)}' is not a known 3D animation.`,
+      );
+    }
+    if (!isFiniteNumber(entry.start) || entry.start < 0) {
+      throw new Error(`animations[${i}].start must be a non-negative number.`);
+    }
+    if (!isFiniteNumber(entry.duration) || entry.duration <= 0) {
+      throw new Error(`animations[${i}].duration must be a positive number.`);
+    }
+    if (typeof entry.easing !== "string") {
+      throw new Error(`animations[${i}].easing must be an easing name string.`);
+    }
+    const params: Record<string, SerializedValue3D> = {};
+    if (isRecord(entry.params)) {
+      for (const [key, pVal] of Object.entries(entry.params)) {
+        params[key] = validateSerializedValue(
+          `animations[${i}].params.${key}`,
+          pVal,
+        );
+      }
+    }
+    validatedAnimations.push({
+      targetId: entry.targetId,
+      name: entry.name,
+      start: entry.start,
+      duration: entry.duration,
+      easing: entry.easing,
+      params,
+    });
   }
 
   if (!isRecord(data.timeline) || !isFiniteNumber(data.timeline.currentTime)) {
@@ -477,8 +559,11 @@ export function parseScene3DDocument(input: unknown): Scene3DDocument {
       fov: data.camera.fov,
       target: clone3(data.camera.target),
     },
+    properties: isRecord(data.properties)
+      ? (data.properties as unknown as Scene3DPropertiesData)
+      : undefined,
     mobjects,
-    animations: [],
+    animations: validatedAnimations,
     timeline: { currentTime: Math.max(0, data.timeline.currentTime) },
   };
 }
@@ -527,8 +612,41 @@ export function applyScene3D(
       mobject.sync();
     }
 
+    if (document.properties) {
+      scene.properties.setMultiple(document.properties);
+      scene.applySceneProperties();
+    }
+
+    for (const serialized of document.animations) {
+      const target = scene.mobjectManager.get(serialized.targetId);
+      if (!target) continue;
+
+      const easingKey = serialized.easing as keyof typeof Easing;
+      const easingFn = Easing[easingKey] ?? Easing.easeInOut;
+      const animInput: Animation3DInput = {
+        duration: Values.number(serialized.duration),
+        easing: easingFn,
+        easingName: serialized.easing,
+      };
+
+      for (const [key, val] of Object.entries(serialized.params)) {
+        if (val.type === ValueType.vector) {
+          animInput[key] = Values3D.vector3(val.value as Vector3Data);
+        } else if (val.type === ValueType.number) {
+          animInput[key] = Values.number(val.value as number);
+        }
+      }
+
+      const animInstance = target.animations.create(
+        serialized.name as Animation3DName,
+        animInput,
+      );
+      scene.animationSystem.restore(animInstance, serialized.start);
+    }
+
     scene.camera.camera.fov = document.camera.fov;
     scene.camera.setTarget(document.camera.target);
+    scene.animationSystem.setCurrentTime(document.timeline.currentTime);
     scene.render();
 
     return { mobjects: document.mobjects.length };

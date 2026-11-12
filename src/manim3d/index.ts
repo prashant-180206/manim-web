@@ -104,6 +104,36 @@ export {
 } from "./UI/mobject3dUI";
 
 export {
+  Scene3DProperties,
+  DEFAULT_SCENE3D_PROPERTIES,
+  type Scene3DPropertiesData,
+} from "./scene3dProperties";
+
+export { Animation3DName } from "./animation/animation3dName";
+export {
+  Animation3D,
+  type Animation3DOptions,
+  type Animation3DTarget,
+  type Animation3DTargetType,
+} from "./animation/animation3d";
+export {
+  Animation3DProvider,
+  type Animation3DInput,
+  type Animation3DFactory,
+} from "./animation/animation3dProvider";
+export { Animation3DRegistry } from "./animation/animation3dRegistry";
+export { Animation3DSystem } from "./animation/animation3dSystem";
+
+export {
+  Animation3DUI,
+  ANIMATION3D_ICONS,
+  type Anim3DCreationUiData,
+  type Animation3DItemUIData,
+  type Animation3DPlaybackUIData,
+  type Animation3DTimelineUIData,
+} from "./UI/animation3dUI";
+
+export {
   SCENE3D_FILE_FORMAT,
   SCENE3D_FILE_VERSION,
   applyScene3D,

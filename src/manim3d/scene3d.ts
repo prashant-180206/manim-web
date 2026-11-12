@@ -3,6 +3,8 @@ import { Signal } from "@/manim/events/signal";
 import { Camera3D } from "./camera3d";
 import { Mobject3DManager } from "./mobject/helpers/mobject3dManager";
 import { Selection3D } from "./utils/selection3d";
+import { Animation3DSystem } from "./animation/animation3dSystem";
+import { Scene3DProperties } from "./scene3dProperties";
 
 /*
 |--------------------------------------------------------------------------
@@ -44,6 +46,14 @@ export class Scene3D {
 
   readonly selection: Selection3D;
 
+  readonly animationSystem: Animation3DSystem;
+
+  readonly properties: Scene3DProperties;
+
+  private gridHelper: THREE.GridHelper | null = null;
+
+  private axesHelper: THREE.AxesHelper | null = null;
+
   /** Emitted after each `update(dt)`, before the frame is rendered. */
   readonly onUpdate = new Signal<[number]>();
 
@@ -83,17 +93,24 @@ export class Scene3D {
 
     this.camera = new Camera3D({ fov: options.fov });
 
+    this.animationSystem = new Animation3DSystem(this);
+    this.properties = new Scene3DProperties(
+      options.background ? { backgroundColor: options.background } : {},
+    );
+
     this.mobjectManager = new Mobject3DManager();
     this.scene.add(this.mobjectManager.root);
 
     this.selection = new Selection3D(this);
-    this.mobjectManager.onRemove.connect((mobject) =>
-      this.selection.forget(mobject),
-    );
+    this.mobjectManager.onRemove.connect((mobject) => {
+      this.selection.forget(mobject);
+      this.animationSystem.removeTarget(mobject.id);
+    });
 
     this.lightRig.name = "light-rig-3d";
     this.scene.add(this.lightRig);
     this.setupLights();
+    this.applySceneProperties();
 
     this.maxPixelRatio = Math.max(
       1,
@@ -180,15 +197,117 @@ export class Scene3D {
     this.update(this.timer.getDelta());
   };
 
-  /** Advance mobjects, emit `onUpdate`, then draw one frame. */
+  /** Advance animations and mobjects, emit `onUpdate`, then draw one frame. */
   update(dt: number): void {
     if (this.disposed) return;
+
+    this.animationSystem.update(dt);
 
     for (const mobject of this.mobjectManager.all()) {
       mobject.update(dt);
     }
 
     this.onUpdate.emit(dt);
+    this.render();
+  }
+
+  /** Sync authored scene properties (background, lighting, helpers) to Three.js. */
+  applySceneProperties(): void {
+    if (this.disposed) return;
+
+    const props = this.properties.get();
+
+    // Background
+    if (props.backgroundTransparent) {
+      this.scene.background = null;
+    } else {
+      this.scene.background = new THREE.Color(props.backgroundColor);
+    }
+
+    // Ambient light
+    const ambient = this.lightRig.getObjectByName(
+      "ambient-3d",
+    ) as THREE.HemisphereLight | undefined;
+    if (ambient) {
+      ambient.color.set(props.ambientSkyColor);
+      ambient.groundColor.set(props.ambientGroundColor);
+      ambient.intensity = props.ambientIntensity;
+    }
+
+    // Key light
+    const key = this.lightRig.getObjectByName(
+      "key-3d",
+    ) as THREE.DirectionalLight | undefined;
+    if (key) {
+      key.color.set(props.keyLightColor);
+      key.intensity = props.keyLightIntensity;
+      key.position.set(
+        props.keyLightPosition.x,
+        props.keyLightPosition.y,
+        props.keyLightPosition.z,
+      );
+    }
+
+    // Fill light
+    const fill = this.lightRig.getObjectByName(
+      "fill-3d",
+    ) as THREE.DirectionalLight | undefined;
+    if (fill) {
+      fill.color.set(props.fillLightColor);
+      fill.intensity = props.fillLightIntensity;
+      fill.position.set(
+        props.fillLightPosition.x,
+        props.fillLightPosition.y,
+        props.fillLightPosition.z,
+      );
+    }
+
+    // Grid helper
+    if (props.gridVisible) {
+      if (!this.gridHelper) {
+        this.gridHelper = new THREE.GridHelper(
+          props.gridSize,
+          props.gridDivisions,
+          props.gridColor,
+          props.gridColor,
+        );
+        this.gridHelper.name = "grid-helper-3d";
+        this.scene.add(this.gridHelper);
+      } else {
+        this.scene.remove(this.gridHelper);
+        this.gridHelper.geometry.dispose();
+        this.gridHelper = new THREE.GridHelper(
+          props.gridSize,
+          props.gridDivisions,
+          props.gridColor,
+          props.gridColor,
+        );
+        this.gridHelper.name = "grid-helper-3d";
+        this.scene.add(this.gridHelper);
+      }
+      this.gridHelper.visible = true;
+    } else if (this.gridHelper) {
+      this.gridHelper.visible = false;
+    }
+
+    // Axes helper
+    if (props.axesVisible) {
+      if (!this.axesHelper) {
+        this.axesHelper = new THREE.AxesHelper(props.axesSize);
+        this.axesHelper.name = "axes-helper-3d";
+        this.scene.add(this.axesHelper);
+      } else {
+        this.scene.remove(this.axesHelper);
+        this.axesHelper.geometry.dispose();
+        this.axesHelper = new THREE.AxesHelper(props.axesSize);
+        this.axesHelper.name = "axes-helper-3d";
+        this.scene.add(this.axesHelper);
+      }
+      this.axesHelper.visible = true;
+    } else if (this.axesHelper) {
+      this.axesHelper.visible = false;
+    }
+
     this.render();
   }
 
@@ -223,6 +342,7 @@ export class Scene3D {
   /** Remove every mobject, keeping the renderer and lights alive. */
   clear(): void {
     this.selection.clear();
+    this.animationSystem.clear();
     this.mobjectManager.clear();
     this.render();
   }
@@ -239,7 +359,20 @@ export class Scene3D {
     this.onUpdate.clear();
 
     this.selection.dispose();
+    this.animationSystem.clear();
     this.mobjectManager.dispose();
+
+    if (this.gridHelper) {
+      this.scene.remove(this.gridHelper);
+      this.gridHelper.geometry.dispose();
+      this.gridHelper = null;
+    }
+
+    if (this.axesHelper) {
+      this.scene.remove(this.axesHelper);
+      this.axesHelper.geometry.dispose();
+      this.axesHelper = null;
+    }
 
     this.scene.remove(this.lightRig);
     this.lightRig.clear();

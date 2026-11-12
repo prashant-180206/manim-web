@@ -5,6 +5,8 @@ import {
 } from "./helpers/propertycontroller3d";
 import type { Mobject3DName } from "./helpers/mobject3dName";
 import type { EulerData, Vector3Data } from "../utils/types3d";
+import { Animation3DProvider } from "../animation/animation3dProvider";
+import { Animation3DRegistry } from "../animation/animation3dRegistry";
 
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +38,10 @@ export abstract class Mobject3D<P extends BaseProperty3D = BaseProperty3D> {
   /** The three.js node that renders this mobject. */
   readonly object: THREE.Object3D;
 
+  readonly animationTargetType = "mobject3d" as const;
+
+  readonly animations: Animation3DProvider<Mobject3D>;
+
   private readonly propertyController: PropertyController3D<P>;
 
   private disposed = false;
@@ -57,6 +63,8 @@ export abstract class Mobject3D<P extends BaseProperty3D = BaseProperty3D> {
     this.object = object;
     this.object.userData.mobjectId = id;
     this.propertyController = new PropertyController3D(properties);
+    this.animations = new Animation3DProvider<Mobject3D>(this);
+    Animation3DRegistry.registerBaseAnimations(this);
 
     // Subclass fields are not initialised yet, so only apply the transform
     // here. `sync()` is safe to call once the primitive has finished

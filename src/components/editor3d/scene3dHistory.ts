@@ -35,6 +35,8 @@ function contentSignature(document: Scene3DDocument): string {
   return JSON.stringify({
     mobjects: document.mobjects,
     camera: document.camera,
+    properties: document.properties,
+    animations: document.animations,
   });
 }
 
